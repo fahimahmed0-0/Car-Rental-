@@ -1,0 +1,48 @@
+# Ignore configuration files containing sensitive information
+/includes/config.prod.php
+/carrental/includes/config.prod.php
+
+# Ignore environment files
+.env
+*.env
+
+# Ignore log files
+*.log
+logs/
+
+# Ignore vendor directories
+/vendor/
+/node_modules/
+
+# Ignore IDE and editor files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
+
+# Ignore backup files
+*.bak
+*.swp
+*~
+
+# Ignore compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Ignore packaged files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
