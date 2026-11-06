@@ -1,6 +1,9 @@
 # Ignore configuration files containing sensitive information
 /includes/config.prod.php
-/carrental/includes/config.prod.php
+
+# Never commit database dumps, they contain customer data
+*.sql
+!/database/carrental.template.sql
 
 # Ignore environment files
 .env

@@ -19,11 +19,15 @@ This repository has been prepared for public sharing on GitHub by removing sensi
 ### Database Setup
 
 1. Create a new database for the application.
-2. Import the database structure from `carrental.template.sql`:
+2. Import the database structure from `database/carrental.template.sql`:
    ```
-   mysql -u your_username -p your_database_name < carrental.template.sql
+   mysql -u your_username -p your_database_name < database/carrental.template.sql
    ```
 3. Update the admin password in the database with a secure hashed password.
+4. Add the payment tables from the command line (this script cannot run from a browser):
+   ```
+   php database/update_database.php
+   ```
 
 ### Email Configuration
 

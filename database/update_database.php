@@ -1,6 +1,11 @@
 <?php
 // Database update script for payment functionality
-include('includes/config.php');
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    exit('Forbidden');
+}
+
+include(__DIR__ . '/../includes/config.php');
 
 try {
     // Add payment-related columns to tblbooking table if they don't exist
