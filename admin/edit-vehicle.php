@@ -163,7 +163,7 @@ include __DIR__ . '/includes/layout_head.php';
           <div class="rounded-lg border border-slate-200 p-2.5 text-center space-y-2">
             <div class="text-xs font-bold text-slate-700">Image <?php echo $i; ?></div>
             <?php if ($imgVal !== ''): ?>
-              <img src="img/vehicleimages/<?php echo Security::e($imgVal); ?>" alt="Image <?php echo $i; ?>" class="h-24 w-full rounded object-cover">
+              <img src="<?php echo Security::e(Security::vehicleImageUrl($imgVal, 'img/vehicleimages/')); ?>" alt="Image <?php echo $i; ?>" class="h-24 w-full rounded object-cover">
             <?php else: ?>
               <div class="h-24 flex items-center justify-center rounded bg-slate-100 text-[11px] text-slate-400">No Image</div>
             <?php endif; ?>

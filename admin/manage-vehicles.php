@@ -60,7 +60,7 @@ include __DIR__ . '/includes/layout_head.php';
                 <td class="px-4 py-3 text-slate-500"><?php echo $idx + 1; ?></td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-3">
-                    <img src="img/vehicleimages/<?php echo Security::e($v->Vimage1); ?>" alt="" class="h-10 w-14 rounded object-cover border border-slate-200">
+                    <img src="<?php echo Security::e(Security::vehicleImageUrl($v->Vimage1, 'img/vehicleimages/')); ?>" alt="" class="h-10 w-14 rounded object-cover border border-slate-200">
                     <span class="font-bold text-slate-900"><?php echo Security::e($v->VehiclesTitle); ?></span>
                   </div>
                 </td>

@@ -144,7 +144,7 @@ include __DIR__ . '/includes/layout_head.php';
         <!-- Image Gallery -->
         <div class="card overflow-hidden p-3">
           <div class="relative aspect-[16/9] overflow-hidden rounded-xl bg-slate-100">
-            <img :src="'admin/img/vehicleimages/' + activeImg" alt="<?php echo Security::e($vehicle->VehiclesTitle); ?>" class="h-full w-full object-cover">
+            <img :src="(activeImg && (activeImg.startsWith('http://') || activeImg.startsWith('https://'))) ? activeImg : ('admin/img/vehicleimages/' + (activeImg || 'car_755x430.png'))" alt="<?php echo Security::e($vehicle->VehiclesTitle); ?>" class="h-full w-full object-cover">
           </div>
           <?php if (count($images) > 1): ?>
             <div class="mt-3 grid grid-cols-5 gap-2">
@@ -152,7 +152,7 @@ include __DIR__ . '/includes/layout_head.php';
                 <button type="button" @click="activeImg = <?php echo Security::e(json_encode($img)); ?>"
                         :class="activeImg === <?php echo Security::e(json_encode($img)); ?> ? 'ring-2 ring-blue-700 border-blue-700' : 'border-slate-200 opacity-80 hover:opacity-100'"
                         class="overflow-hidden rounded-lg border bg-slate-100 aspect-[16/10] transition">
-                  <img src="admin/img/vehicleimages/<?php echo Security::e($img); ?>" alt="Thumbnail" class="h-full w-full object-cover">
+                  <img src="<?php echo Security::e(Security::vehicleImageUrl($img)); ?>" alt="Thumbnail" class="h-full w-full object-cover">
                 </button>
               <?php endforeach; ?>
             </div>
@@ -327,7 +327,7 @@ include __DIR__ . '/includes/layout_head.php';
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <?php foreach ($similarCars as $sim): ?>
             <a href="vehical-details.php?vhid=<?php echo (int) $sim->id; ?>" class="card overflow-hidden hover:border-blue-600 transition">
-              <img src="admin/img/vehicleimages/<?php echo Security::e($sim->Vimage1); ?>" alt="<?php echo Security::e($sim->VehiclesTitle); ?>" class="h-40 w-full object-cover">
+              <img src="<?php echo Security::e(Security::vehicleImageUrl($sim->Vimage1)); ?>" alt="<?php echo Security::e($sim->VehiclesTitle); ?>" class="h-40 w-full object-cover">
               <div class="p-4">
                 <div class="text-xs font-bold text-blue-700"><?php echo Security::e($sim->BrandName); ?></div>
                 <div class="font-bold text-slate-950 truncate"><?php echo Security::e($sim->VehiclesTitle); ?></div>

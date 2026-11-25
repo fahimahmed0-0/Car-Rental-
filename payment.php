@@ -144,7 +144,7 @@ include __DIR__ . '/includes/layout_head.php';
         <div class="card p-6 space-y-4">
           <h2 class="text-lg font-extrabold text-slate-950 border-b border-slate-100 pb-3">Booking Summary</h2>
           <div class="flex gap-4 items-center">
-            <img src="admin/img/vehicleimages/<?php echo Security::e($booking->Vimage1); ?>" alt="<?php echo Security::e($booking->VehiclesTitle); ?>" class="h-20 w-28 rounded-lg object-cover border border-slate-200">
+            <img src="<?php echo Security::e(Security::vehicleImageUrl($booking->Vimage1)); ?>" alt="<?php echo Security::e($booking->VehiclesTitle); ?>" class="h-20 w-28 rounded-lg object-cover border border-slate-200">
             <div>
               <div class="text-xs font-bold text-blue-700"><?php echo Security::e($booking->BrandName); ?></div>
               <div class="text-base font-bold text-slate-950"><?php echo Security::e($booking->VehiclesTitle); ?></div>

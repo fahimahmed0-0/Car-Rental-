@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/index.php": {
+      "runtime": "vercel-php@0.7.3",
+      "includeFiles": "{src,includes,admin,database,PHPMailer,assets,*.php}/**"
+    }
+  },
+  "routes": [
+    { "src": "^/$", "dest": "/api/index.php?__route=index.php" },
+    { "src": "^/admin/?$", "dest": "/api/index.php?__route=admin/index.php" },
+    { "src": "^/(src|database|storage|tests|includes|admin/includes)/.*$", "status": 403 },
+    { "src": "^/(\\.env.*|composer\\..*|package.*\\.json)$", "status": 403 },
+    { "src": "^/(.*\\.php)$", "dest": "/api/index.php?__route=$1" },
+    { "handle": "filesystem" }
+  ]
+}

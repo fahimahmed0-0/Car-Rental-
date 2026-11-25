@@ -18,6 +18,21 @@ final class Security
     }
 
     /**
+     * Resolves either a local filename (in admin/img/vehicleimages/) or an external https:// URL.
+     */
+    public static function vehicleImageUrl(?string $value, string $localPrefix = 'admin/img/vehicleimages/'): string
+    {
+        $val = trim((string) ($value ?? ''));
+        if ($val === '') {
+            return $localPrefix . 'car_755x430.png';
+        }
+        if (str_starts_with($val, 'https://') || str_starts_with($val, 'http://')) {
+            return $val;
+        }
+        return $localPrefix . $val;
+    }
+
+    /**
      * Sanitize admin-authored CMS HTML with a strict tag allowlist and attribute stripping.
      */
     public static function sanitizeRichHtml(?string $html): string

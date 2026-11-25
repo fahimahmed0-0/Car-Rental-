@@ -61,7 +61,7 @@ include __DIR__ . '/includes/layout_head.php';
       </div>
 
       <div class="mt-6 flex flex-col sm:flex-row gap-5 items-center border-b border-slate-100 pb-6">
-        <img src="admin/img/vehicleimages/<?php echo Security::e($booking->Vimage1); ?>" alt="<?php echo Security::e($booking->VehiclesTitle); ?>" class="h-32 w-48 rounded-xl object-cover border border-slate-200">
+        <img src="<?php echo Security::e(Security::vehicleImageUrl($booking->Vimage1)); ?>" alt="<?php echo Security::e($booking->VehiclesTitle); ?>" class="h-32 w-48 rounded-xl object-cover border border-slate-200">
         <div class="space-y-1 text-sm">
           <div class="text-xs font-bold text-blue-700"><?php echo Security::e($booking->BrandName); ?></div>
           <h2 class="text-lg font-extrabold text-slate-950"><?php echo Security::e($booking->VehiclesTitle); ?></h2>

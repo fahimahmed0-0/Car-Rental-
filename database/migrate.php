@@ -101,6 +101,11 @@ try {
 
     // 3. Upgrade tblvehicles
     addColumnIfMissing($dbh, 'tblvehicles', 'Transmission', "varchar(50) NOT NULL DEFAULT 'Manual'");
+    if (tableExists($dbh, 'tblvehicles')) {
+        foreach (['Vimage1', 'Vimage2', 'Vimage3', 'Vimage4', 'Vimage5'] as $imgCol) {
+            $dbh->exec("ALTER TABLE `tblvehicles` MODIFY COLUMN `{$imgCol}` varchar(500) DEFAULT NULL");
+        }
+    }
 
     // 4. Upgrade tblbooking with payment, lock, and location fields
     addColumnIfMissing($dbh, 'tblbooking', 'PaymentMethod', 'varchar(50) DEFAULT NULL');
@@ -238,6 +243,14 @@ try {
         `attempt_at` datetime NOT NULL,
         PRIMARY KEY (`id`),
         KEY `idx_rl_bucket` (`bucket_key`, `attempt_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    $dbh->exec("CREATE TABLE IF NOT EXISTS `tblsessions` (
+        `id` varchar(128) NOT NULL,
+        `data` mediumtext NOT NULL,
+        `expires_at` int(10) unsigned NOT NULL,
+        PRIMARY KEY (`id`),
+        KEY `idx_sess_exp` (`expires_at`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     echo "All migrations completed successfully.\n";

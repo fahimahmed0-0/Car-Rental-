@@ -1,0 +1,9 @@
+.git
+.env
+*.env
+*.sql
+!database/carrental.template.sql
+node_modules
+tests
+storage/logs/*.log
+api/v1

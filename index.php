@@ -147,7 +147,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
         <?php foreach ($featuredCars as $car): ?>
           <article class="card group overflow-hidden flex flex-col transition hover:border-blue-500 hover:shadow-md">
             <a href="vehical-details.php?vhid=<?php echo (int) $car->id; ?>" class="relative block h-52 bg-slate-100 overflow-hidden">
-              <img src="admin/img/vehicleimages/<?php echo Security::e($car->Vimage1); ?>"
+              <img src="<?php echo Security::e(Security::vehicleImageUrl($car->Vimage1)); ?>"
                    alt="<?php echo Security::e($car->BrandName . ' ' . $car->VehiclesTitle); ?>"
                    class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
               <span class="absolute top-3 left-3 rounded-md bg-slate-950/85 px-2.5 py-1 text-xs font-bold text-white">

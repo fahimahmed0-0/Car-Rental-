@@ -178,7 +178,7 @@ $today = date('Y-m-d');
           <template x-for="car in vehicles" :key="car.id">
             <article class="card overflow-hidden flex flex-col transition hover:border-blue-500 hover:shadow-md">
               <a :href="'vehical-details.php?vhid=' + car.id + dateQuery()" class="relative block h-48 bg-slate-100">
-                <img :src="'admin/img/vehicleimages/' + car.Vimage1" :alt="car.VehiclesTitle" class="h-full w-full object-cover">
+                <img :src="(car.Vimage1 && (car.Vimage1.startsWith('http://') || car.Vimage1.startsWith('https://'))) ? car.Vimage1 : ('admin/img/vehicleimages/' + (car.Vimage1 || 'car_755x430.png'))" :alt="car.VehiclesTitle" class="h-full w-full object-cover">
                 <span class="absolute top-3 left-3 rounded-md bg-slate-950/85 px-2.5 py-1 text-xs font-bold text-white" x-text="car.BrandName"></span>
                 <template x-if="filters.fromDate && filters.toDate">
                   <span class="absolute top-3 right-3 rounded-md px-2.5 py-1 text-xs font-bold text-white"

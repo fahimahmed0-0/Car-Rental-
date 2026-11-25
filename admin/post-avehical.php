@@ -12,11 +12,11 @@ use App\Services\UploadService;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     Csrf::requireValid();
     try {
-        $vimage1 = UploadService::storeVehicleImage($_FILES['img1'] ?? [], true);
-        $vimage2 = UploadService::storeVehicleImage($_FILES['img2'] ?? [], true);
-        $vimage3 = UploadService::storeVehicleImage($_FILES['img3'] ?? [], true);
-        $vimage4 = UploadService::storeVehicleImage($_FILES['img4'] ?? [], true);
-        $vimage5 = UploadService::storeVehicleImage($_FILES['img5'] ?? [], false) ?? '';
+        $vimage1 = UploadService::storeVehicleImageOrUrl($_FILES['img1'] ?? [], $_POST['img1_url'] ?? '', true);
+        $vimage2 = UploadService::storeVehicleImageOrUrl($_FILES['img2'] ?? [], $_POST['img2_url'] ?? '', true);
+        $vimage3 = UploadService::storeVehicleImageOrUrl($_FILES['img3'] ?? [], $_POST['img3_url'] ?? '', true);
+        $vimage4 = UploadService::storeVehicleImageOrUrl($_FILES['img4'] ?? [], $_POST['img4_url'] ?? '', true);
+        $vimage5 = UploadService::storeVehicleImageOrUrl($_FILES['img5'] ?? [], $_POST['img5_url'] ?? '', false) ?? '';
 
         $sql = 'INSERT INTO tblvehicles
             (VehiclesTitle, VehiclesBrand, VehiclesOverview, PricePerDay, FuelType, ModelYear, SeatingCapacity, Transmission,
@@ -132,13 +132,13 @@ include __DIR__ . '/includes/layout_head.php';
     </div>
 
     <div class="card p-6 space-y-4">
-      <h2 class="text-sm font-extrabold uppercase tracking-wider text-blue-700 border-b border-slate-100 pb-2">Vehicle Images (JPG / PNG / WebP, max 5 MB each)</h2>
+      <h2 class="text-sm font-extrabold uppercase tracking-wider text-blue-700 border-b border-slate-100 pb-2">Vehicle Images (File Upload OR https:// Image URL)</h2>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs">
-        <div><label class="mb-1 block font-bold text-slate-700">Image 1 *</label><input type="file" name="img1" accept=".jpg,.jpeg,.png,.webp" required class="form-input !p-2"></div>
-        <div><label class="mb-1 block font-bold text-slate-700">Image 2 *</label><input type="file" name="img2" accept=".jpg,.jpeg,.png,.webp" required class="form-input !p-2"></div>
-        <div><label class="mb-1 block font-bold text-slate-700">Image 3 *</label><input type="file" name="img3" accept=".jpg,.jpeg,.png,.webp" required class="form-input !p-2"></div>
-        <div><label class="mb-1 block font-bold text-slate-700">Image 4 *</label><input type="file" name="img4" accept=".jpg,.jpeg,.png,.webp" required class="form-input !p-2"></div>
-        <div><label class="mb-1 block font-bold text-slate-700">Image 5 (Optional)</label><input type="file" name="img5" accept=".jpg,.jpeg,.png,.webp" class="form-input !p-2"></div>
+        <div class="space-y-1.5"><label class="block font-bold text-slate-700">Image 1 *</label><input type="file" name="img1" accept=".jpg,.jpeg,.png,.webp" class="form-input !p-2"><input type="url" name="img1_url" placeholder="or https://... image URL" class="form-input !py-1.5"></div>
+        <div class="space-y-1.5"><label class="block font-bold text-slate-700">Image 2 *</label><input type="file" name="img2" accept=".jpg,.jpeg,.png,.webp" class="form-input !p-2"><input type="url" name="img2_url" placeholder="or https://... image URL" class="form-input !py-1.5"></div>
+        <div class="space-y-1.5"><label class="block font-bold text-slate-700">Image 3 *</label><input type="file" name="img3" accept=".jpg,.jpeg,.png,.webp" class="form-input !p-2"><input type="url" name="img3_url" placeholder="or https://... image URL" class="form-input !py-1.5"></div>
+        <div class="space-y-1.5"><label class="block font-bold text-slate-700">Image 4 *</label><input type="file" name="img4" accept=".jpg,.jpeg,.png,.webp" class="form-input !p-2"><input type="url" name="img4_url" placeholder="or https://... image URL" class="form-input !py-1.5"></div>
+        <div class="space-y-1.5"><label class="block font-bold text-slate-700">Image 5 (Optional)</label><input type="file" name="img5" accept=".jpg,.jpeg,.png,.webp" class="form-input !p-2"><input type="url" name="img5_url" placeholder="or https://... image URL" class="form-input !py-1.5"></div>
       </div>
     </div>
 

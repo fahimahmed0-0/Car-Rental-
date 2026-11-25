@@ -75,11 +75,11 @@ CREATE TABLE IF NOT EXISTS `tblvehicles` (
   `ModelYear` int(6) DEFAULT NULL,
   `SeatingCapacity` int(11) DEFAULT NULL,
   `Transmission` varchar(50) NOT NULL DEFAULT 'Manual',
-  `Vimage1` varchar(180) DEFAULT NULL,
-  `Vimage2` varchar(180) DEFAULT NULL,
-  `Vimage3` varchar(180) DEFAULT NULL,
-  `Vimage4` varchar(180) DEFAULT NULL,
-  `Vimage5` varchar(180) DEFAULT NULL,
+  `Vimage1` varchar(500) DEFAULT NULL,
+  `Vimage2` varchar(500) DEFAULT NULL,
+  `Vimage3` varchar(500) DEFAULT NULL,
+  `Vimage4` varchar(500) DEFAULT NULL,
+  `Vimage5` varchar(500) DEFAULT NULL,
   `AirConditioner` tinyint(1) DEFAULT 0,
   `PowerDoorLocks` tinyint(1) DEFAULT 0,
   `AntiLockBrakingSystem` tinyint(1) DEFAULT 0,
@@ -300,6 +300,17 @@ CREATE TABLE IF NOT EXISTS `tblratelimits` (
   `attempt_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_rl_bucket` (`bucket_key`, `attempt_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+-- Table: `tblsessions` (Serverless DB session store)
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tblsessions` (
+  `id` varchar(128) NOT NULL,
+  `data` mediumtext NOT NULL,
+  `expires_at` int(10) unsigned NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_sess_exp` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 COMMIT;

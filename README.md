@@ -55,6 +55,28 @@ Modernized PHP 8.2 + MariaDB car rental platform featuring a clean **White / Blu
 | **AI Search, Assistant & Copilot** | Cloud LLM (`AI_PROVIDER=gemini` or `openai`) | Local Ollama (`AI_LOCAL_URL`) → `DeterministicAiFallback` (PHP regex/SQL engine) |
 | **Payments** | Live Razorpay (`PAYMENT_MODE=razorpay`) | Built-in **Sandbox Gateway** (QR + UPI/Card/Wallet/Netbanking simulator) |
 | **Email / OTPs** | PHPMailer SMTP (`SMTP_HOST` configured) | Queued in `tblmailoutbox` (inspectable in Admin → *Mail Outbox*) |
+| **Vehicle Images** | Cloudinary (`CLOUDINARY_*`) or local disk (XAMPP) | External `https://` image URL input |
+
+---
+
+## Deploying to Vercel (`vercel.json` + `api/index.php`)
+
+This repository includes [vercel.json](vercel.json), [.vercelignore](.vercelignore), [api/index.php](api/index.php), and `tblsessions` DB-backed sessions so all routes run through a single `vercel-php` serverless function:
+
+1. **Provision an External Cloud MySQL Database** (Vercel has no built-in MySQL): e.g. **TiDB Serverless**, **Aiven MySQL**, or **Railway MySQL**.
+2. **Initialize the Remote Database from your local terminal:**
+   Set your Cloud MySQL credentials temporarily in `.env` (with `DB_PORT` and `DB_SSL=true` if required by your provider) and run:
+   ```bash
+   mysql -h YOUR_HOST -P YOUR_PORT -u YOUR_USER -p YOUR_DB < database/carrental.template.sql
+   php database/migrate.php
+   php database/seed.php
+   ```
+3. **Configure Vercel Project Environment Variables:**
+   * `APP_ENV=production`, `APP_DEBUG=false`, `SESSION_DRIVER=database`
+   * `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`, `DB_SSL=true`
+   * Optional: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (for admin image uploads on Vercel; `https://` URLs also work without Cloudinary)
+   * Optional: `AI_PROVIDER`, `AI_API_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `SMTP_*`
+4. **Deploy:** Connect the GitHub repo in Vercel and deploy (`vercel --prod` or auto-deploy on `main`).
 
 ---
 

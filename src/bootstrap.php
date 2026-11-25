@@ -26,7 +26,7 @@ spl_autoload_register(static function (string $class): void {
 Env::load(APP_ROOT . DIRECTORY_SEPARATOR . '.env');
 date_default_timezone_set(Env::get('APP_TIMEZONE', 'Asia/Kolkata') ?: 'Asia/Kolkata');
 
-// Configure safe error handling & persistent log file
+// Configure safe error handling & persistent log file when writable (falls back to stderr on serverless)
 $logDir = APP_ROOT . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'logs';
 if (is_dir($logDir) && is_writable($logDir)) {
     ini_set('log_errors', '1');
@@ -41,13 +41,14 @@ if (Env::bool('APP_DEBUG', false)) {
     ini_set('display_errors', '0');
 }
 
-if (PHP_SAPI !== 'cli') {
-    Security::sendHeaders();
-    Session::start();
-}
-
 // Global PDO instance for compatibility with existing pages and services
 $dbh = Database::connection();
+
+if (PHP_SAPI !== 'cli') {
+    Security::sendHeaders();
+    Session::registerDbHandler($dbh);
+    Session::start();
+}
 
 if (!function_exists('e')) {
     function e(mixed $value): string

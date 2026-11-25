@@ -22,7 +22,7 @@ if ($imgId <= 0) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update'])) {
     Csrf::requireValid();
     try {
-        $storedName = UploadService::storeVehicleImage($_FILES['vehicle_img'] ?? [], true);
+        $storedName = UploadService::storeVehicleImageOrUrl($_FILES['vehicle_img'] ?? [], $_POST['vehicle_img_url'] ?? '', true);
         $upd = $dbh->prepare("UPDATE tblvehicles SET `{$columnName}` = :img WHERE id = :id");
         $upd->execute([':img' => $storedName, ':id' => $imgId]);
         Session::setFlash('success', "Vehicle Image {$imageIndex} updated successfully.");
@@ -54,7 +54,7 @@ include __DIR__ . '/layout_head.php';
     <?php if ($row && !empty($row->current_img)): ?>
       <div>
         <div class="mb-2 text-xs font-bold uppercase text-slate-600">Current Image</div>
-        <img src="img/vehicleimages/<?php echo Security::e($row->current_img); ?>" alt="Current" class="h-48 w-full rounded-xl object-cover border border-slate-200">
+        <img src="<?php echo Security::e(Security::vehicleImageUrl($row->current_img, 'img/vehicleimages/')); ?>" alt="Current" class="h-48 w-full rounded-xl object-cover border border-slate-200">
       </div>
     <?php endif; ?>
 
@@ -62,9 +62,13 @@ include __DIR__ . '/layout_head.php';
       <?php echo Csrf::field(); ?>
       <div>
         <label class="mb-1 block text-xs font-bold uppercase text-slate-600">Upload New Image (JPG / PNG / WebP, max 5 MB)</label>
-        <input type="file" name="vehicle_img" accept=".jpg,.jpeg,.png,.webp" required class="form-input !p-2">
+        <input type="file" name="vehicle_img" accept=".jpg,.jpeg,.png,.webp" class="form-input !p-2">
       </div>
-      <button type="submit" name="update" class="btn-primary">Upload &amp; Replace Image</button>
+      <div>
+        <label class="mb-1 block text-xs font-bold uppercase text-slate-600">Or Paste Image URL (https://...)</label>
+        <input type="url" name="vehicle_img_url" placeholder="https://res.cloudinary.com/..." class="form-input">
+      </div>
+      <button type="submit" name="update" class="btn-primary">Save Image</button>
     </form>
   </div>
 </div>
