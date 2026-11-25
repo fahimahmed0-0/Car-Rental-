@@ -91,6 +91,15 @@ try {
         }
     }
 
+    // Ensure Toyota brand exists for Fortuner seed record
+    $toyStmt = $dbh->prepare('SELECT id FROM tblbrands WHERE BrandName = :b LIMIT 1');
+    $toyStmt->execute([':b' => 'Toyota']);
+    $toyotaId = (int) ($toyStmt->fetchColumn() ?: 0);
+    if ($toyotaId === 0) {
+        $dbh->prepare('INSERT INTO tblbrands (BrandName) VALUES (:b)')->execute([':b' => 'Toyota']);
+        $toyotaId = (int) $dbh->lastInsertId();
+    }
+
     // 4. Seed sample vehicles if empty (using images already committed in admin/img/vehicleimages/)
     $vehCount = (int) $dbh->query('SELECT COUNT(*) FROM tblvehicles')->fetchColumn();
     if ($vehCount === 0) {
@@ -99,7 +108,7 @@ try {
             ['Fronx Turbo Alpha', 1, 'Sleek crossover with responsive turbo petrol engine, comfortable 5-seat cabin, and modern safety suite.', 2200, 'Petrol', 2024, 5, 'Automatic', 'fronxmarutisuzukifronxrightfrontthreequarter1.webp', 'fronxfronxleftsideview.webp', 'fronxfronxbootspace.webp', 'fronxmarutisuzukifronxrearseats.webp', ''],
             ['XUV300 W8 Optional', 2, '5-star safety rated compact SUV with dual airbags, ABS, crash sensors, and refined highway handling.', 2600, 'Diesel', 2023, 5, 'Manual', 'xuv300[20192024]xuv300rightfrontthreequarter.webp', 'xuv300[20192024]rightfrontthreequarter1.webp', 'xuv300[20192024]rightfrontthreequarter6.webp', 'xuv300[20192024]rightfrontthreequarter42.webp', ''],
             ['Punch Creative', 3, 'High ground-clearance urban micro-SUV built for Assam roads and weekend getaways.', 1800, 'Petrol', 2024, 5, 'Manual', 'punchpunchrightfrontthreequarter.webp', 'punchtigorleftsideview.webp', 'punchpunchrearseats.webp', 'punchtatapunchbootreleaseleverfuellidreleaselever17.webp', ''],
-            ['Fortuner Legender 4x4', 7, 'Full-size 7-seater touring SUV suited for family trips to Kaziranga, Tawang, and hill terrain.', 4800, 'Diesel', 2023, 7, 'Automatic', '2015_Toyota_Fortuner_(New_Zealand).jpg', 'toyota-fortuner-legender-rear-quarters-6e57.jpg', 'zw-toyota-fortuner-2020-2.jpg', 'boot-with-standard-luggage-202327489_930x620.jpg', ''],
+            ['Fortuner Legender 4x4', $toyotaId, 'Full-size 7-seater touring SUV suited for family trips to Kaziranga, Tawang, and hill terrain.', 4800, 'Diesel', 2023, 7, 'Automatic', '2015_Toyota_Fortuner_(New_Zealand).jpg', 'toyota-fortuner-legender-rear-quarters-6e57.jpg', 'zw-toyota-fortuner-2020-2.jpg', 'boot-with-standard-luggage-202327489_930x620.jpg', ''],
             ['WagonR VXi', 1, 'Economical, easy-to-park hatchback with tall-boy headroom and practical luggage capacity.', 1400, 'CNG', 2023, 5, 'Manual', 'wagonrwagonrrightfrontthreequarter (1).webp', 'wagonrwagonrleftsideview (1).webp', 'wagonrwagonrrightrearthreequarter.webp', 'wagonrmarutisuzukiwagonropenboottrunk25.webp', ''],
         ];
 

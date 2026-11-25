@@ -247,7 +247,7 @@ final class DemoDatabase
             [3, 'TATA'],
             [4, 'Nissan'],
             [5, 'Hyundai'],
-            [7, 'Volkswagen'],
+            [7, 'Toyota'],
         ];
         $bStmt = $pdo->prepare('INSERT OR IGNORE INTO tblbrands (id, BrandName) VALUES (?, ?)');
         foreach ($brands as $b) {

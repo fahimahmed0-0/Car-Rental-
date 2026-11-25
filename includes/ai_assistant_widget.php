@@ -2,22 +2,16 @@
 
 declare(strict_types=1);
 ?>
-<div x-data="driveXAssistant()" class="fixed bottom-5 right-5 z-40 print:hidden">
-  <button type="button" @click="open = !open"
-          class="flex items-center gap-2 rounded-full bg-blue-700 px-4 py-3 text-xs font-bold text-white shadow-lg hover:bg-blue-800 border border-blue-600 transition">
-    <span class="h-2 w-2 rounded-full bg-sky-300"></span>
-    <span x-text="open ? 'Close Help' : 'DriveX Assistant'"></span>
-  </button>
-
+<div x-data="driveXAssistant()" class="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3 print:hidden">
   <!-- Chat Drawer -->
   <div x-show="open" x-transition style="display:none;"
-       class="mt-3 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col">
-    <div class="bg-slate-950 text-white px-4 py-3 flex items-center justify-between border-b-2 border-red-600">
+       class="w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col">
+    <div class="shrink-0 bg-slate-950 text-white px-4 py-3 flex items-center justify-between border-b-2 border-red-600">
       <div>
         <div class="text-sm font-extrabold">DriveX Rental Assistant</div>
         <div class="text-[11px] text-sky-300" x-text="engineLabel">Ask about cars, tokens, or policies</div>
       </div>
-      <button type="button" @click="open = false" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
+      <button type="button" @click="open = false" class="text-slate-400 hover:text-white text-lg leading-none" aria-label="Close assistant">&times;</button>
     </div>
 
     <div class="h-64 overflow-y-auto p-4 space-y-3 bg-slate-50 text-xs" id="assistant-messages">
@@ -30,7 +24,7 @@ declare(strict_types=1);
       </template>
     </div>
 
-    <div class="border-t border-slate-200 bg-white p-3">
+    <div class="shrink-0 border-t border-slate-200 bg-white p-3">
       <div class="mb-2 flex flex-wrap gap-1.5">
         <button type="button" @click="quickAsk('How do loyalty tokens work?')" class="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-800 hover:bg-blue-100">Token rules</button>
         <button type="button" @click="quickAsk('What is the cancellation policy?')" class="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-800 hover:bg-blue-100">Cancellation</button>
@@ -42,6 +36,13 @@ declare(strict_types=1);
       </form>
     </div>
   </div>
+
+  <!-- Launcher Button -->
+  <button type="button" @click="open = !open"
+          class="flex items-center gap-2 rounded-full bg-blue-700 px-4 py-3 text-xs font-bold text-white shadow-lg hover:bg-blue-800 border border-blue-600 transition">
+    <span class="h-2 w-2 rounded-full bg-sky-300"></span>
+    <span x-text="open ? 'Close Help' : 'DriveX Assistant'"></span>
+  </button>
 </div>
 
 <script>

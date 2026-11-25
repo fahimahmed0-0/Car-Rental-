@@ -140,7 +140,7 @@ function pricingAdvisor() {
         var data = await res.json();
         if (data.success) {
           this.pricingTips = data.insights || [];
-          this.pricingMeta = 'Engine: ' + (data.tier_label || 'SQL Utilization Engine');
+          this.pricingMeta = 'Engine: ' + (data.tier_label || 'Utilization Analytics');
         }
       } catch (e) {}
       this.pricingLoading = false;
@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           labels: ['Pending', 'Confirmed', 'Active', 'Completed', 'Cancelled', 'Expired'],
           datasets: [{
             data: [sc.pending || 0, sc.confirmed || 0, sc.active || 0, sc.completed || 0, sc.cancelled || 0, sc.expired || 0],
-            backgroundColor: ['#38bdf8', '#1d4ed8', '#0f172a', '#2563eb', '#dc2626', '#94a3b8']
+            backgroundColor: ['#38bdf8', '#1d4ed8', '#0284c7', '#0f172a', '#dc2626', '#94a3b8']
           }]
         },
         options: { responsive: true, maintainAspectRatio: false }

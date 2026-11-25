@@ -227,7 +227,7 @@ include __DIR__ . '/includes/layout_head.php';
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="mb-1 block text-xs font-semibold text-slate-600">Pickup Date</label>
-                <input type="date" name="fromdate" x-model="fromDate" @change="refreshQuote()" min="<?php echo $today; ?>" required class="form-input">
+                <input type="date" name="fromdate" x-model="fromDate" @change="if (fromDate && (!toDate || toDate < fromDate)) { toDate = fromDate; } refreshQuote()" min="<?php echo $today; ?>" required class="form-input">
               </div>
               <div>
                 <label class="mb-1 block text-xs font-semibold text-slate-600">Drop-off Date</label>
