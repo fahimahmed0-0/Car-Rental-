@@ -1,172 +1,106 @@
 <?php
-session_start();
-error_reporting(0);
-include('includes/config.php');
-if (strlen($_SESSION['alogin']) == 0) {
-    header('location:index.php');
-} else {
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/config.php';
+
+use App\Core\Csrf;
+use App\Core\Security;
+use App\Core\Session;
+use App\Services\TokenLedgerService;
+
+$tokenSvc = new TokenLedgerService($dbh);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['adjust_tokens'])) {
+    Csrf::requireValid();
+    try {
+        $email = trim((string) ($_POST['user_email'] ?? ''));
+        $delta = (int) ($_POST['delta'] ?? 0);
+        $note = trim((string) ($_POST['note'] ?? ''));
+        $tokenSvc->adminAdjust($email, $delta, $note);
+        Session::setFlash('success', "Adjusted {$delta} tokens for {$email}.");
+    } catch (Throwable $e) {
+        Session::setFlash('error', $e->getMessage());
+    }
+    Security::redirect('token-management.php');
+}
+
+$summary = $tokenSvc->getAdminSummary();
+
+$adminTitle = 'Loyalty Token Management';
+$adminNav = 'tokens';
+include __DIR__ . '/includes/layout_head.php';
 ?>
 
-    <!doctype html>
-    <html lang="en" class="no-js">
+<div class="space-y-6">
+  <h1 class="text-2xl font-extrabold text-slate-950">Loyalty Token Management</h1>
 
-    <head>
-        <meta charset="UTF-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1">
-        <meta name="description" content="">
-        <meta name="author" content="">
-        <meta name="theme-color" content="#3e454c">
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div class="card p-5 border-t-4 border-t-blue-700">
+      <div class="text-xs font-bold uppercase text-slate-500">Total Tokens Issued</div>
+      <div class="mt-2 text-3xl font-extrabold text-blue-700"><?php echo (int) $summary['total_issued']; ?></div>
+    </div>
+    <div class="card p-5 border-t-4 border-t-slate-900">
+      <div class="text-xs font-bold uppercase text-slate-500">Total Tokens Redeemed</div>
+      <div class="mt-2 text-3xl font-extrabold text-slate-950"><?php echo (int) $summary['total_redeemed']; ?></div>
+    </div>
+    <div class="card p-5 border-t-4 border-t-red-600">
+      <div class="text-xs font-bold uppercase text-slate-500">Total Discount Given</div>
+      <div class="mt-2 text-3xl font-extrabold text-red-600">₹<?php echo number_format((float) $summary['total_discount'], 2); ?></div>
+    </div>
+  </div>
 
-        <title>Car Rental Portal | Token Management</title>
+  <!-- Admin Manual Adjustment -->
+  <div class="card p-6">
+    <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-900 mb-3">Manual Token Adjustment (Audited in Ledger)</h2>
+    <form method="post" class="grid grid-cols-1 gap-3 sm:grid-cols-12">
+      <?php echo Csrf::field(); ?>
+      <div class="sm:col-span-4">
+        <select name="user_email" required class="form-input">
+          <option value="">Select Customer</option>
+          <?php foreach ($summary['users'] as $u): ?>
+            <option value="<?php echo Security::e($u->EmailId); ?>">
+              <?php echo Security::e($u->FullName . ' (' . $u->EmailId . ') - ' . (int) $u->TokenBalance . ' tok'); ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="sm:col-span-2">
+        <input type="number" name="delta" required class="form-input" placeholder="+10 or -5">
+      </div>
+      <div class="sm:col-span-4">
+        <input type="text" name="note" required class="form-input" placeholder="Reason (e.g. Goodwill bonus)">
+      </div>
+      <div class="sm:col-span-2">
+        <button type="submit" name="adjust_tokens" class="btn-primary w-full">Apply</button>
+      </div>
+    </form>
+  </div>
 
-        <!-- Font awesome -->
-        <link rel="stylesheet" href="css/font-awesome.min.css">
-        <!-- Sandstone Bootstrap CSS -->
-        <link rel="stylesheet" href="css/bootstrap.min.css">
-        <!-- Bootstrap Datatables -->
-        <link rel="stylesheet" href="css/dataTables.bootstrap.min.css">
-        <!-- Bootstrap social button library -->
-        <link rel="stylesheet" href="css/bootstrap-social.css">
-        <!-- Bootstrap select -->
-        <link rel="stylesheet" href="css/bootstrap-select.css">
-        <!-- Bootstrap file input -->
-        <link rel="stylesheet" href="css/fileinput.min.css">
-        <!-- Awesome Bootstrap checkbox -->
-        <link rel="stylesheet" href="css/awesome-bootstrap-checkbox.css">
-        <!-- Admin Stye -->
-        <link rel="stylesheet" href="css/style.css">
-        <style>
-            .errorWrap {
-                padding: 10px;
-                margin: 0 0 20px 0;
-                background: #fff;
-                border-left: 4px solid #dd3d36;
-                -webkit-box-shadow: 0 1px 1px 0 rgba(0, 0, 0, .1);
-                box-shadow: 0 1px 1px 0 rgba(0, 0, 0, .1);
-            }
+  <div class="card overflow-hidden">
+    <table class="w-full text-left text-xs">
+      <thead class="bg-slate-50 text-slate-600 uppercase border-b border-slate-200">
+        <tr>
+          <th class="px-4 py-3">#</th>
+          <th class="px-4 py-3">Customer</th>
+          <th class="px-4 py-3">Email</th>
+          <th class="px-4 py-3">Current Balance</th>
+          <th class="px-4 py-3">Total Earned</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <?php foreach ($summary['users'] as $idx => $u): ?>
+          <tr class="hover:bg-slate-50">
+            <td class="px-4 py-3 text-slate-500"><?php echo $idx + 1; ?></td>
+            <td class="px-4 py-3 font-bold text-slate-900"><?php echo Security::e($u->FullName); ?></td>
+            <td class="px-4 py-3 text-slate-700"><?php echo Security::e($u->EmailId); ?></td>
+            <td class="px-4 py-3 font-extrabold text-blue-700"><?php echo (int) $u->TokenBalance; ?></td>
+            <td class="px-4 py-3 text-slate-700"><?php echo (int) $u->TotalTokensEarned; ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
 
-            .succWrap {
-                padding: 10px;
-                margin: 0 0 20px 0;
-                background: #fff;
-                border-left: 4px solid #5cb85c;
-                -webkit-box-shadow: 0 1px 1px 0 rgba(0, 0, 0, .1);
-                box-shadow: 0 1px 1px 0 rgba(0, 0, 0, .1);
-            }
-        </style>
-
-    </head>
-
-    <body>
-        <?php include('includes/header.php'); ?>
-
-        <div class="ts-main-content">
-            <?php include('includes/leftbar.php'); ?>
-            <div class="content-wrapper">
-                <div class="container-fluid">
-
-                    <div class="row">
-                        <div class="col-md-12">
-
-                            <h2 class="page-title">Token Management</h2>
-
-                            <!-- Zero Configuration Table -->
-                            <div class="panel panel-default">
-                                <div class="panel-heading">Token Statistics</div>
-                                <div class="panel-body">
-                                    <?php
-                                    // Get total tokens issued
-                                    $sql = "SELECT SUM(totalEarnedTokens) as total_tokens FROM tblcustomertokens";
-                                    $query = $dbh->prepare($sql);
-                                    $query->execute();
-                                    $total_tokens = $query->fetch(PDO::FETCH_ASSOC)['total_tokens'];
-
-                                    // Get total tokens redeemed
-                                    $sql = "SELECT SUM(tokensRedeemed) as redeemed_tokens FROM tbltokenredemption";
-                                    $query = $dbh->prepare($sql);
-                                    $query->execute();
-                                    $redeemed_tokens = $query->fetch(PDO::FETCH_ASSOC)['redeemed_tokens'];
-
-                                    // Get total discount given
-                                    $sql = "SELECT SUM(discountAmount) as total_discount FROM tbltokenredemption";
-                                    $query = $dbh->prepare($sql);
-                                    $query->execute();
-                                    $total_discount = $query->fetch(PDO::FETCH_ASSOC)['total_discount'];
-                                    ?>
-
-                                    <div class="row">
-                                        <div class="col-md-4">
-                                            <div class="well">
-                                                <h4>Total Tokens Issued</h4>
-                                                <h3><?php echo $total_tokens ? $total_tokens : '0'; ?></h3>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="well">
-                                                <h4>Total Tokens Redeemed</h4>
-                                                <h3><?php echo $redeemed_tokens ? $redeemed_tokens : '0'; ?></h3>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="well">
-                                                <h4>Total Discount Given</h4>
-                                                <h3>₹<?php echo $total_discount ? $total_discount : '0'; ?></h3>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <table id="zctb" class="display table table-striped table-bordered table-hover" cellspacing="0" width="100%">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>User Email</th>
-                                                <th>Current Balance</th>
-                                                <th>Total Earned</th>
-                                                <th>Last Updated</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php
-                                            $sql = "SELECT * from tblcustomertokens ORDER BY lastUpdated DESC";
-                                            $query = $dbh->prepare($sql);
-                                            $query->execute();
-                                            $results = $query->fetchAll(PDO::FETCH_OBJ);
-                                            $cnt = 1;
-                                            if ($query->rowCount() > 0) {
-                                                foreach ($results as $result) {
-                                            ?>
-                                                    <tr>
-                                                        <td><?php echo htmlentities($cnt); ?></td>
-                                                        <td><?php echo htmlentities($result->userEmail); ?></td>
-                                                        <td><?php echo htmlentities($result->tokenBalance); ?></td>
-                                                        <td><?php echo htmlentities($result->totalEarnedTokens); ?></td>
-                                                        <td><?php echo htmlentities($result->lastUpdated); ?></td>
-                                                    </tr>
-                                            <?php $cnt = $cnt + 1;
-                                                }
-                                            } ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Loading Scripts -->
-        <script src="js/jquery.min.js"></script>
-        <script src="js/bootstrap-select.min.js"></script>
-        <script src="js/bootstrap.min.js"></script>
-        <script src="js/jquery.dataTables.min.js"></script>
-        <script src="js/dataTables.bootstrap.min.js"></script>
-        <script src="js/Chart.min.js"></script>
-        <script src="js/fileinput.js"></script>
-        <script src="js/chartData.js"></script>
-        <script src="js/main.js"></script>
-    </body>
-
-    </html>
-<?php } ?>
+<?php include __DIR__ . '/includes/layout_foot.php'; ?>

@@ -1,172 +1,61 @@
-
 <?php
-session_start();
-error_reporting(0);
-include('includes/config.php');
-if(strlen($_SESSION['login'])==0)
-  { 
-header('location:index.php');
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/config.php';
+
+use App\Core\Security;
+
+if (empty($_SESSION['login'])) {
+    Security::redirect('index.php');
 }
-else{
+
+$stmt = $dbh->prepare('SELECT * FROM tbltestimonial WHERE UserEmail = :email ORDER BY id DESC');
+$stmt->execute([':email' => (string) $_SESSION['login']]);
+$items = $stmt->fetchAll();
+
+$pageTitle = 'DriveX Assam | My Testimonials';
+include __DIR__ . '/includes/layout_head.php';
 ?>
-<!DOCTYPE HTML>
-<html lang="en">
-<head>
 
-<title>Car Rental Portal | My Testimonials </title>
-<!--Bootstrap -->
-<link rel="stylesheet" href="assets/css/bootstrap.min.css" type="text/css">
-<!--Custome Style -->
-<link rel="stylesheet" href="assets/css/style.css" type="text/css">
-<!--OWL Carousel slider-->
-<link rel="stylesheet" href="assets/css/owl.carousel.css" type="text/css">
-<link rel="stylesheet" href="assets/css/owl.transitions.css" type="text/css">
-<!--slick-slider -->
-<link href="assets/css/slick.css" rel="stylesheet">
-<!--bootstrap-slider -->
-<link href="assets/css/bootstrap-slider.min.css" rel="stylesheet">
-<!--FontAwesome Font Style -->
-<link href="assets/css/font-awesome.min.css" rel="stylesheet">
-
-<!-- SWITCHER -->
-		<link rel="stylesheet" id="switcher-css" type="text/css" href="assets/switcher/css/switcher.css" media="all" />
-		<link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/red.css" title="red" media="all" data-default-color="true" />
-		<link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/orange.css" title="orange" media="all" />
-		<link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/blue.css" title="blue" media="all" />
-		<link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/pink.css" title="pink" media="all" />
-		<link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/green.css" title="green" media="all" />
-		<link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/purple.css" title="purple" media="all" />
-        
-<!-- Fav and touch icons -->
-<link rel="apple-touch-icon-precomposed" sizes="144x144" href="assets/images/favicon-icon/apple-touch-icon-144-precomposed.png">
-<link rel="apple-touch-icon-precomposed" sizes="114x114" href="assets/images/favicon-icon/apple-touch-icon-114-precomposed.html">
-<link rel="apple-touch-icon-precomposed" sizes="72x72" href="assets/images/favicon-icon/apple-touch-icon-72-precomposed.png">
-<link rel="apple-touch-icon-precomposed" href="assets/images/favicon-icon/apple-touch-icon-57-precomposed.png">
-<link rel="shortcut icon" href="assets/images/favicon-icon/favicon.png">
-<!-- Google-Font-->
-<link href="https://fonts.googleapis.com/css?family=Lato:300,400,700,900" rel="stylesheet">
-</head>
-<body>
-<?php include('includes/colorswitcher.php');?>
-<!-- /Switcher -->  
-        
-<!--Header-->
-<?php include('includes/header.php');?>
-<!--Page Header-->
-<section class="page-header profile_page">
-  <div class="container">
-    <div class="page-header_wrap">
-      <div class="page-heading">
-        <h1>My Testimonials</h1>
-      </div>
-      <ul class="coustom-breadcrumb">
-        <li><a href="#">Home</a></li>
-        <li>My Testimonials</li>
-      </ul>
+<section class="bg-slate-950 text-white py-8 border-b-4 border-blue-700">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-extrabold">My Testimonials</h1>
+      <p class="text-xs text-slate-300 mt-1">Reviews you have submitted for DriveX Assam.</p>
     </div>
+    <a href="post-testimonial.php" class="btn-red !py-2 !text-xs">+ Write Review</a>
   </div>
-  <!-- Dark Overlay-->
-  <div class="dark-overlay"></div>
 </section>
-<!-- /Page Header--> 
 
-<?php 
-$useremail=$_SESSION['login'];
-$sql = "SELECT * from tblusers where EmailId=:useremail";
-$query = $dbh -> prepare($sql);
-$query -> bindParam(':useremail',$useremail, PDO::PARAM_STR);
-$query->execute();
-$results=$query->fetchAll(PDO::FETCH_OBJ);
-$cnt=1;
-if($query->rowCount() > 0)
-{
-foreach($results as $result)
-{ ?>
-<section class="user_profile inner_pages">
-  <div class="container">
-    <div class="user_profile_info gray-bg padding_4x4_40">
-      <div class="upload_user_logo"> <img src="assets/images/profiledp.png" alt="image">
+<section class="py-10 flex-1">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
+      <div class="lg:col-span-3">
+        <?php include __DIR__ . '/includes/sidebar.php'; ?>
       </div>
-
-      <div class="dealer_info">
-        <h5><?php echo htmlentities($result->FullName);?></h5>
-        <p><?php echo htmlentities($result->Address);?><br>
-          <?php echo htmlentities($result->City);?>&nbsp;<?php echo htmlentities($result->Country); }}?></p>
-      </div>
-    </div>
-  
-  <div class="row">
-      <div class="col-md-3 col-sm-3">
-        <?php include('includes/sidebar.php');?>
-      <div class="col-md-8 col-sm-8">
-
-
-
-        <div class="profile_wrap">
-          <h5 class="uppercase underline">My Testimonials </h5>
-          <div class="my_vehicles_list">
-            <ul class="vehicle_listing">
-<?php 
-$useremail=$_SESSION['login'];
-$sql = "SELECT * from tbltestimonial where UserEmail=:useremail";
-$query = $dbh -> prepare($sql);
-$query -> bindParam(':useremail',$useremail, PDO::PARAM_STR);
-$query->execute();
-$results=$query->fetchAll(PDO::FETCH_OBJ);
-
-if($cnt=$query->rowCount() > 0)
-{
-foreach($results as $result)
-{ ?>
-
-              <li>
-           
-                <div>
-                 <p><?php echo htmlentities($result->Testimonial);?> </p>
-                   <p><b>Posting Date:</b><?php echo htmlentities($result->PostingDate);?> </p>
-                </div>
-                <?php if($result->status==1){ ?>
-                 <div class="vehicle_status"> <a class="btn outline btn-xs active-btn">Active</a>
-
-                  <div class="clearfix"></div>
-                  </div>
-                  <?php } else {?>
-               <div class="vehicle_status"> <a href="#" class="btn outline btn-xs">Waiting for approval</a>
-                  <div class="clearfix"></div>
-                  </div>
-                  <?php } ?>
-              </li>
-              <?php } } ?>
-              
-            </ul>
-           
+      <div class="lg:col-span-9 space-y-4">
+        <?php if (empty($items)): ?>
+          <div class="card p-10 text-center">
+            <p class="text-sm text-slate-600">You haven't posted any testimonials yet.</p>
+            <a href="post-testimonial.php" class="btn-primary mt-4">Post Your First Review</a>
           </div>
-        </div>
+        <?php else: ?>
+          <?php foreach ($items as $row): ?>
+            <div class="card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p class="text-sm text-slate-800">"<?php echo Security::e($row->Testimonial); ?>"</p>
+                <p class="mt-2 text-xs text-slate-500">Posted: <?php echo Security::e($row->PostingDate); ?></p>
+              </div>
+              <span class="shrink-0 rounded-full px-3 py-1 text-xs font-bold <?php echo (int) $row->status === 1 ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'; ?>">
+                <?php echo (int) $row->status === 1 ? 'Published' : 'Pending Approval'; ?>
+              </span>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
       </div>
     </div>
   </div>
 </section>
-<!--/my-vehicles--> 
 
-<<!--Footer -->
-<?php include('includes/footer.php');?>
-<!-- /Footer--> 
-
-<!--Back to top-->
-<div id="back-top" class="back-top"> <a href="#top"><i class="fa fa-angle-up" aria-hidden="true"></i> </a> </div>
-
-<!-- Scripts --> 
-<script src="assets/js/jquery.min.js"></script>
-<script src="assets/js/bootstrap.min.js"></script> 
-<script src="assets/js/interface.js"></script> 
-<!--Switcher-->
-<script src="assets/switcher/js/switcher.js"></script>
-<!--bootstrap-slider-JS--> 
-<script src="assets/js/bootstrap-slider.min.js"></script> 
-<!--Slider-JS--> 
-<script src="assets/js/slick.min.js"></script> 
-<script src="assets/js/owl.carousel.min.js"></script>
-
-</body>
-</html>
-<?php } ?>
+<?php include __DIR__ . '/includes/footer.php'; ?>

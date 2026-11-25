@@ -1,188 +1,89 @@
 <?php
-session_start();
-error_reporting(0);
-include('includes/config.php');
-if(strlen($_SESSION['alogin'])==0)
-	{	
-header('location:index.php');
-}
-else{
-if(isset($_REQUEST['eid']))
-	{
-$eid=intval($_GET['eid']);
-$status="0";
-$sql = "UPDATE tbltestimonial SET status=:status WHERE  id=:eid";
-$query = $dbh->prepare($sql);
-$query -> bindParam(':status',$status, PDO::PARAM_STR);
-$query-> bindParam(':eid',$eid, PDO::PARAM_STR);
-$query -> execute();
 
-$msg="Testimonial Successfully Inacrive";
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/config.php';
+
+use App\Core\Csrf;
+use App\Core\Security;
+use App\Core\Session;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_id'], $_POST['target_status'])) {
+    Csrf::requireValid();
+    $tid = (int) $_POST['toggle_id'];
+    $st = ((int) $_POST['target_status'] === 1) ? 1 : 0;
+    $upd = $dbh->prepare('UPDATE tbltestimonial SET status = :st WHERE id = :id');
+    $upd->execute([':st' => $st, ':id' => $tid]);
+    Session::setFlash('success', $st === 1 ? 'Testimonial activated.' : 'Testimonial deactivated.');
+    Security::redirect('testimonials.php');
 }
 
+$rows = $dbh->query(
+    'SELECT t.*, u.FullName FROM tbltestimonial t JOIN tblusers u ON u.EmailId = t.UserEmail ORDER BY t.id DESC'
+)->fetchAll();
 
-if(isset($_REQUEST['aeid']))
-	{
-$aeid=intval($_GET['aeid']);
-$status=1;
+$adminTitle = 'Manage Testimonials';
+$adminNav = 'testimonials';
+include __DIR__ . '/includes/layout_head.php';
+?>
 
-$sql = "UPDATE tbltestimonial SET status=:status WHERE  id=:aeid";
-$query = $dbh->prepare($sql);
-$query -> bindParam(':status',$status, PDO::PARAM_STR);
-$query-> bindParam(':aeid',$aeid, PDO::PARAM_STR);
-$query -> execute();
+<div class="space-y-5">
+  <div>
+    <h1 class="text-2xl font-extrabold text-slate-950">Manage Testimonials</h1>
+    <p class="text-xs text-slate-500">Approve customer reviews with automated spam/toxicity pre-screening.</p>
+  </div>
 
-$msg="Testimonial Successfully Active";
-}
+  <div class="card overflow-hidden">
+    <table class="w-full text-left text-xs">
+      <thead class="bg-slate-50 text-slate-600 uppercase border-b border-slate-200">
+        <tr>
+          <th class="px-4 py-3">#</th>
+          <th class="px-4 py-3">Customer</th>
+          <th class="px-4 py-3">Testimonial</th>
+          <th class="px-4 py-3">AI Screen</th>
+          <th class="px-4 py-3">Status</th>
+          <th class="px-4 py-3">Action</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <?php if (empty($rows)): ?>
+          <tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">No testimonials submitted yet.</td></tr>
+        <?php else: ?>
+          <?php foreach ($rows as $idx => $r):
+            $isActive = ((int) $r->status === 1);
+            $flag = (string) ($r->AiModerationFlag ?? 'clean');
+          ?>
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-3 text-slate-500"><?php echo $idx + 1; ?></td>
+              <td class="px-4 py-3">
+                <div class="font-bold text-slate-900"><?php echo Security::e($r->FullName); ?></div>
+                <div class="text-[11px] text-slate-500"><?php echo Security::e($r->UserEmail); ?></div>
+              </td>
+              <td class="px-4 py-3 text-slate-700 max-w-md"><?php echo Security::e($r->Testimonial); ?></td>
+              <td class="px-4 py-3">
+                <span class="rounded-full px-2.5 py-0.5 text-[11px] font-bold <?php echo $flag === 'flagged' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-800'; ?>">
+                  <?php echo Security::e(ucfirst($flag)); ?>
+                </span>
+              </td>
+              <td class="px-4 py-3 font-bold <?php echo $isActive ? 'text-blue-700' : 'text-slate-500'; ?>">
+                <?php echo $isActive ? 'Active' : 'Inactive'; ?>
+              </td>
+              <td class="px-4 py-3">
+                <form method="post" class="inline">
+                  <?php echo Csrf::field(); ?>
+                  <input type="hidden" name="toggle_id" value="<?php echo (int) $r->id; ?>">
+                  <input type="hidden" name="target_status" value="<?php echo $isActive ? 0 : 1; ?>">
+                  <button type="submit" class="<?php echo $isActive ? 'btn-red' : 'btn-primary'; ?> !py-1 !px-2.5 !text-[11px]">
+                    <?php echo $isActive ? 'Deactivate' : 'Approve'; ?>
+                  </button>
+                </form>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
 
-
- ?>
-
-<!doctype html>
-<html lang="en" class="no-js">
-
-<head>
-	<meta charset="UTF-8">
-	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1">
-	<meta name="description" content="">
-	<meta name="author" content="">
-	<meta name="theme-color" content="#3e454c">
-	
-	<title>Car Rental Portal |Admin Manage testimonials   </title>
-
-	<!-- Font awesome -->
-	<link rel="stylesheet" href="css/font-awesome.min.css">
-	<!-- Sandstone Bootstrap CSS -->
-	<link rel="stylesheet" href="css/bootstrap.min.css">
-	<!-- Bootstrap Datatables -->
-	<link rel="stylesheet" href="css/dataTables.bootstrap.min.css">
-	<!-- Bootstrap social button library -->
-	<link rel="stylesheet" href="css/bootstrap-social.css">
-	<!-- Bootstrap select -->
-	<link rel="stylesheet" href="css/bootstrap-select.css">
-	<!-- Bootstrap file input -->
-	<link rel="stylesheet" href="css/fileinput.min.css">
-	<!-- Awesome Bootstrap checkbox -->
-	<link rel="stylesheet" href="css/awesome-bootstrap-checkbox.css">
-	<!-- Admin Stye -->
-	<link rel="stylesheet" href="css/style.css">
-  <style>
-		.errorWrap {
-    padding: 10px;
-    margin: 0 0 20px 0;
-    background: #fff;
-    border-left: 4px solid #dd3d36;
-    -webkit-box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
-    box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
-}
-.succWrap{
-    padding: 10px;
-    margin: 0 0 20px 0;
-    background: #fff;
-    border-left: 4px solid #5cb85c;
-    -webkit-box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
-    box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
-}
-		</style>
-
-</head>
-
-<body>
-	<?php include('includes/header.php');?>
-
-	<div class="ts-main-content">
-		<?php include('includes/leftbar.php');?>
-		<div class="content-wrapper">
-			<div class="container-fluid">
-
-				<div class="row">
-					<div class="col-md-12">
-
-						<h2 class="page-title">Manage Testimonials</h2>
-
-						<!-- Zero Configuration Table -->
-						<div class="panel panel-default">
-							<div class="panel-heading">User Testimonials</div>
-							<div class="panel-body">
-							<?php if($error){?><div class="errorWrap"><strong>ERROR</strong>:<?php echo htmlentities($error); ?> </div><?php } 
-				else if($msg){?><div class="succWrap"><strong>SUCCESS</strong>:<?php echo htmlentities($msg); ?> </div><?php }?>
-								<table id="zctb" class="display table table-striped table-bordered table-hover" cellspacing="0" width="100%">
-									<thead>
-										<tr>
-										<th>#</th>
-											<th>Name</th>
-											<th>Email</th>
-											<th>Testimonials</th>
-											<th>Posting date</th>
-											<th>Action</th>
-										</tr>
-									</thead>
-									<tfoot>
-										<tr>
-										<th>#</th>
-											<th>Name</th>
-											<th>Email</th>
-											<th>Testimonials</th>
-											<th>Posting date</th>
-											<th>Action</th>
-										</tr>
-									</tfoot>
-									<tbody>
-
-									<?php $sql = "SELECT tblusers.FullName,tbltestimonial.UserEmail,tbltestimonial.Testimonial,tbltestimonial.PostingDate,tbltestimonial.status,tbltestimonial.id from tbltestimonial join tblusers on tblusers.Emailid=tbltestimonial.UserEmail";
-$query = $dbh -> prepare($sql);
-$query->execute();
-$results=$query->fetchAll(PDO::FETCH_OBJ);
-$cnt=1;
-if($query->rowCount() > 0)
-{
-foreach($results as $result)
-{				?>	
-										<tr>
-											<td><?php echo htmlentities($cnt);?></td>
-											<td><?php echo htmlentities($result->FullName);?></td>
-											<td><?php echo htmlentities($result->UserEmail);?></td>
-											<td><?php echo htmlentities($result->Testimonial);?></td>
-											<td><?php echo htmlentities($result->PostingDate);?></td>
-										<td><?php if($result->status=="" || $result->status==0)
-{
-	?><a href="testimonials.php?aeid=<?php echo htmlentities($result->id);?>" onclick="return confirm('Do you really want to Active')"> Inactive</a>
-<?php } else {?>
-
-<a href="testimonials.php?eid=<?php echo htmlentities($result->id);?>" onclick="return confirm('Do you really want to Inactive')"> Active</a>
-</td>
-<?php } ?></td>
-										</tr>
-										<?php $cnt=$cnt+1; }} ?>
-										
-									</tbody>
-								</table>
-
-						
-
-							</div>
-						</div>
-
-					
-
-					</div>
-				</div>
-
-			</div>
-		</div>
-	</div>
-
-	<!-- Loading Scripts -->
-	<script src="js/jquery.min.js"></script>
-	<script src="js/bootstrap-select.min.js"></script>
-	<script src="js/bootstrap.min.js"></script>
-	<script src="js/jquery.dataTables.min.js"></script>
-	<script src="js/dataTables.bootstrap.min.js"></script>
-	<script src="js/Chart.min.js"></script>
-	<script src="js/fileinput.js"></script>
-	<script src="js/chartData.js"></script>
-	<script src="js/main.js"></script>
-</body>
-</html>
-<?php } ?>
+<?php include __DIR__ . '/includes/layout_foot.php'; ?>

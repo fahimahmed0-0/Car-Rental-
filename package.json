@@ -1,0 +1,12 @@
+{
+  "name": "drivex-assam-car-rental",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "build:css": "npx tailwindcss -i ./assets/css/tailwind.input.css -o ./assets/css/drivex.css --minify",
+    "watch:css": "npx tailwindcss -i ./assets/css/tailwind.input.css -o ./assets/css/drivex.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

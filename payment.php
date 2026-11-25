@@ -1,514 +1,265 @@
 <?php
-session_start();
-error_reporting(0);
-include('includes/config.php');
 
-// Check if user is logged in
-if (strlen($_SESSION['login']) == 0) {
-    header('location:index.php');
-    exit();
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/config.php';
+
+use App\Core\Csrf;
+use App\Core\Security;
+use App\Core\Session;
+use App\Services\BookingService;
+use App\Services\PaymentService;
+
+if (empty($_SESSION['login'])) {
+    Session::setFlash('error', 'Please sign in to complete your payment.');
+    Security::redirect('index.php');
 }
 
-// Get booking details from session or URL parameters
-$booking_id = isset($_GET['booking_id']) ? $_GET['booking_id'] : (isset($_SESSION['current_booking_id']) ? $_SESSION['current_booking_id'] : null);
-$amount = isset($_GET['amount']) ? $_GET['amount'] : (isset($_SESSION['current_booking_amount']) ? $_SESSION['current_booking_amount'] : 0);
+$userEmail = (string) $_SESSION['login'];
+$bookingNumber = (int) ($_GET['booking_id'] ?? $_SESSION['current_booking_id'] ?? 0);
 
-if (!$booking_id || !$amount) {
-    header('location:my-booking.php');
-    exit();
+if ($bookingNumber <= 0) {
+    Security::redirect('my-booking.php');
 }
 
-// Get booking details
-$sql = "SELECT b.*, v.VehiclesTitle, v.VehiclesBrand, v.FuelType, v.ModelYear, v.SeatingCapacity, v.Vimage1 
-        FROM tblbooking b 
-        JOIN tblvehicles v ON b.VehicleId = v.id 
-        WHERE b.BookingNumber = :booking_id";
-$query = $dbh->prepare($sql);
-$query->bindParam(':booking_id', $booking_id, PDO::PARAM_STR);
-$query->execute();
-$booking = $query->fetch(PDO::FETCH_OBJ);
+$bookingSvc = new BookingService($dbh);
+$bookingSvc->expireStalePendingLocks();
+$booking = $bookingSvc->getBookingByNumberForUser($bookingNumber, $userEmail);
 
 if (!$booking) {
-    header('location:my-booking.php');
-    exit();
+    Session::setFlash('error', 'Booking not found for your account.');
+    Security::redirect('my-booking.php');
 }
 
-// Process payment
-if (isset($_POST['process_payment'])) {
-    $payment_method = $_POST['payment_method'];
+if ((string) $booking->PaymentStatus === 'completed') {
+    Security::redirect('payment-success.php?booking_id=' . $bookingNumber);
+}
 
-    if (empty($payment_method)) {
-        $error = "Please select a payment method.";
-    } else {
-        // Include payment gateway
-        include('includes/payment-gateway.php');
-        $paymentGateway = new PaymentGateway($dbh);
+$paymentSvc = new PaymentService($dbh);
 
-        // Process payment through gateway
-        $result = $paymentGateway->processPayment($booking_id, $_SESSION['login'], $amount, $payment_method);
+// Handle direct POST checkout BEFORE HTML output
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
+    Csrf::requireValid();
+    $method = (string) ($_POST['payment_method'] ?? 'upi');
+    $idemKey = (string) ($_POST['idempotency_key'] ?? '');
 
-        if ($result['success']) {
-            // Update booking with payment information
-            $sql = "UPDATE tblbooking SET Status = 1, PaymentMethod = :payment_method, PaymentStatus = 'completed', PaymentDate = NOW() WHERE BookingNumber = :booking_id";
-            $query = $dbh->prepare($sql);
-            $query->bindParam(':payment_method', $payment_method, PDO::PARAM_STR);
-            $query->bindParam(':booking_id', $booking_id, PDO::PARAM_STR);
-
-            if ($query->execute()) {
-                // Process token redemption if applicable
-                $sql = "SELECT tr.* FROM tbltokenredemption tr WHERE tr.bookingId = :booking_id";
-                $query = $dbh->prepare($sql);
-                $query->bindParam(':booking_id', $booking_id, PDO::PARAM_STR);
-                $query->execute();
-                $redemption = $query->fetch(PDO::FETCH_OBJ);
-
-                if ($redemption) {
-                    // Deduct tokens from user account
-                    $sql = "UPDATE tblcustomertokens SET tokenBalance = tokenBalance - :tokens WHERE userEmail = :email";
-                    $query = $dbh->prepare($sql);
-                    $query->bindParam(':tokens', $redemption->tokensRedeemed, PDO::PARAM_INT);
-                    $query->bindParam(':email', $_SESSION['login'], PDO::PARAM_STR);
-                    $query->execute();
-                }
-
-                // Redirect to success page
-                $_SESSION['payment_success'] = true;
-                header('location:payment-success.php?booking_id=' . $booking_id);
-                exit();
-            } else {
-                $error = "Payment processing failed. Please try again.";
-            }
-        } else {
-            $error = $result['message'];
-        }
+    $res = $paymentSvc->processSandboxPayment($bookingNumber, $userEmail, $method, $idemKey ?: null);
+    if ($res['success']) {
+        Session::setFlash('success', 'Payment successful! Transaction ID: ' . ($res['transaction_id'] ?? ''));
+        Security::redirect('payment-success.php?booking_id=' . $bookingNumber);
     }
+    Session::setFlash('error', $res['message']);
+    Security::redirect('payment.php?booking_id=' . $bookingNumber);
 }
 
-// Calculate price lock expiry time (10 minutes from now)
-$price_lock_expiry = date('H:i:s', strtotime('+10 minutes'));
+try {
+    $order = $paymentSvc->createOrderForBooking($bookingNumber, $userEmail);
+} catch (Throwable $e) {
+    Session::setFlash('error', $e->getMessage());
+    Security::redirect('my-booking.php');
+}
+
+$secondsRemaining = (int) ($booking->lock_seconds_remaining ?? 600);
+$idempotencyKey = 'pay_' . $bookingNumber . '_' . bin2hex(random_bytes(8));
+
+$pageTitle = 'DriveX Assam | Secure Checkout #' . $bookingNumber;
+include __DIR__ . '/includes/layout_head.php';
 ?>
 
-<!DOCTYPE HTML>
-<html lang="en">
-
-<head>
-    <title>Car Rental Portal | Payment</title>
-    <!--Bootstrap -->
-    <link rel="stylesheet" href="assets/css/bootstrap.min.css" type="text/css">
-    <!--Custome Style -->
-    <link rel="stylesheet" href="assets/css/style.css" type="text/css">
-    <!--OWL Carousel slider-->
-    <link rel="stylesheet" href="assets/css/owl.carousel.css" type="text/css">
-    <link rel="stylesheet" href="assets/css/owl.transitions.css" type="text/css">
-    <!--slick-slider -->
-    <link href="assets/css/slick.css" rel="stylesheet">
-    <!--bootstrap-slider -->
-    <link href="assets/css/bootstrap-slider.min.css" rel="stylesheet">
-    <!--FontAwesome Font Style -->
-    <link href="assets/css/font-awesome.min.css" rel="stylesheet">
-
-    <style>
-        .payment-container {
-            background: #f8f9fa;
-            min-height: 100vh;
-            padding: 20px 0;
-        }
-
-        .payment-header {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .price-lock-banner {
-            background: linear-gradient(135deg, #ffd700, #ffed4e);
-            color: #333;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            margin: 15px 0;
-            font-weight: bold;
-        }
-
-        .timer {
-            background: #333;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-weight: bold;
-        }
-
-        .payment-methods {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .payment-option {
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 10px 0;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .payment-option:hover {
-            border-color: #007bff;
-            background: #f8f9fa;
-        }
-
-        .payment-option.selected {
-            border-color: #007bff;
-            background: #e3f2fd;
-        }
-
-        .payment-option input[type="radio"] {
-            margin-right: 10px;
-        }
-
-        .payment-icon {
-            width: 40px;
-            height: 40px;
-            background: #f8f9fa;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 15px;
-            font-size: 20px;
-        }
-
-        .qr-section {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            text-align: center;
-        }
-
-        .qr-code {
-            width: 200px;
-            height: 200px;
-            background: #f8f9fa;
-            border: 2px dashed #dee2e6;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 20px auto;
-            font-size: 60px;
-            color: #6c757d;
-        }
-
-        .booking-details {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .car-image {
-            width: 100%;
-            max-width: 200px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-
-        .location-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 10px;
-        }
-
-        .pickup-dot {
-            background: #28a745;
-        }
-
-        .dropoff-dot {
-            background: #dc3545;
-        }
-
-        .final-amount {
-            background: #007bff;
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-        }
-
-        .payment-logos {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-
-        .payment-logo {
-            font-size: 14px;
-            font-weight: bold;
-            color: #6c757d;
-        }
-
-        .upi-apps {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 15px;
-        }
-
-        .upi-app {
-            text-align: center;
-            font-size: 12px;
-            color: #6c757d;
-        }
-
-        .upi-app i {
-            font-size: 24px;
-            margin-bottom: 5px;
-            display: block;
-        }
-    </style>
-</head>
-
-<body>
-    <!--Header-->
-    <?php include('includes/header.php'); ?>
-    <!-- /Header -->
-
-    <div class="payment-container">
-        <div class="container">
-            <div class="row">
-                <!-- Payment Methods Column -->
-                <div class="col-md-8">
-                    <!-- Payment Header -->
-                    <div class="payment-header">
-                        <div class="row align-items-center">
-                            <div class="col-md-6">
-                                <h4><i class="fa fa-arrow-left"></i> Pay ₹<?php echo number_format($amount, 2); ?></h4>
-                                <p class="text-muted">
-                                    <?php echo date('D, d M, h:i A', strtotime($booking->FromDate)); ?> →
-                                    <?php echo date('D, d M, h:i A', strtotime($booking->ToDate)); ?>
-                                </p>
-                            </div>
-                            <div class="col-md-6 text-right">
-                                <div class="price-lock-banner">
-                                    <div>PRICE LOCKED FOR 10 MINS</div>
-                                    <small>Complete your payment soon</small>
-                                </div>
-                                <div class="timer" id="timer">10:00</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Payment Methods -->
-                    <div class="payment-methods">
-                        <h5>Select a Payment method</h5>
-                        <form method="post" id="payment-form">
-                            <div class="payment-option" onclick="selectPayment('upi')">
-                                <input type="radio" name="payment_method" value="upi" id="upi" style="display: none;">
-                                <div class="d-flex align-items-center">
-                                    <div class="payment-icon">
-                                        <i class="fa fa-bolt"></i>
-                                    </div>
-                                    <div>
-                                        <strong>UPI</strong><br>
-                                        <small class="text-muted">Google Pay, PhonePe, BHIM UPI</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="payment-option" onclick="selectPayment('card')">
-                                <input type="radio" name="payment_method" value="card" id="card" style="display: none;">
-                                <div class="d-flex align-items-center">
-                                    <div class="payment-icon">
-                                        <i class="fa fa-credit-card"></i>
-                                    </div>
-                                    <div>
-                                        <strong>Credit / Debit / ATM Card</strong><br>
-                                        <small class="text-muted">Please ensure your card is enabled for online transactions</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="payment-option" onclick="selectPayment('wallet')">
-                                <input type="radio" name="payment_method" value="wallet" id="wallet" style="display: none;">
-                                <div class="d-flex align-items-center">
-                                    <div class="payment-icon">
-                                        <i class="fa fa-wallet"></i>
-                                    </div>
-                                    <div>
-                                        <strong>Mobile Wallet</strong><br>
-                                        <small class="text-muted">All major wallets are supported</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="payment-option" onclick="selectPayment('netbanking')">
-                                <input type="radio" name="payment_method" value="netbanking" id="netbanking" style="display: none;">
-                                <div class="d-flex align-items-center">
-                                    <div class="payment-icon">
-                                        <i class="fa fa-university"></i>
-                                    </div>
-                                    <div>
-                                        <strong>Net Banking</strong><br>
-                                        <small class="text-muted">All major banks are supported</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="payment-logos">
-                                <div class="payment-logo">VISA</div>
-                                <div class="payment-logo">Mastercard SecureCode</div>
-                                <div class="payment-logo">RuPay</div>
-                                <div class="payment-logo">SafeKey</div>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- QR Code Section -->
-                    <div class="qr-section">
-                        <h5>OR</h5>
-                        <h6>Scan QR code</h6>
-                        <div class="qr-code">
-                            <i class="fa fa-qrcode"></i>
-                        </div>
-                        <a href="#" class="btn btn-success">Click to see QR code</a>
-
-                        <div class="upi-apps">
-                            <div class="upi-app">
-                                <i class="fa fa-mobile"></i>
-                                G Pay
-                            </div>
-                            <div class="upi-app">
-                                <i class="fa fa-mobile"></i>
-                                PhonePe
-                            </div>
-                            <div class="upi-app">
-                                <i class="fa fa-mobile"></i>
-                                BHIM
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Booking Details Column -->
-                <div class="col-md-4">
-                    <div class="booking-details">
-                        <h5>Booking Details</h5>
-
-                        <!-- Car Information -->
-                        <div class="mb-3">
-                            <strong><?php echo htmlentities($booking->VehiclesTitle); ?></strong>
-                            <ul class="list-unstyled text-muted">
-                                <li>• <?php echo htmlentities($booking->FuelType); ?></li>
-                                <li>• <?php echo htmlentities($booking->SeatingCapacity); ?> Seats</li>
-                                <li>• <?php echo htmlentities($booking->ModelYear); ?></li>
-                            </ul>
-                        </div>
-
-                        <!-- Car Image -->
-                        <?php if ($booking->Vimage1): ?>
-                            <img src="admin/img/vehicleimages/<?php echo htmlentities($booking->Vimage1); ?>"
-                                alt="Car" class="car-image">
-                        <?php endif; ?>
-
-                        <!-- Pickup Details -->
-                        <div class="mb-3">
-                            <div class="location-dot pickup-dot"></div>
-                            <strong><?php echo date('D, d M, h:i A', strtotime($booking->FromDate)); ?></strong><br>
-                            <small class="text-muted">Self Savari Car rental, Guwahati, Assam</small>
-                        </div>
-
-                        <!-- Drop-off Details -->
-                        <div class="mb-3">
-                            <div class="location-dot dropoff-dot"></div>
-                            <strong><?php echo date('D, d M, h:i A', strtotime($booking->ToDate)); ?></strong><br>
-                            <small class="text-muted">Self Savari Car rental, Guwahati, Assam</small>
-                        </div>
-
-                        <!-- Cancellation Policy -->
-                        <div class="alert alert-secondary">
-                            <strong>Cancellation Policy:</strong><br>
-                            <small>Cancellation Fee: 50% of trip amount or INR 4000 (whichever is lower) Until <?php echo date('d M Y, h:i A', strtotime($booking->FromDate . ' -1 day')); ?></small>
-                        </div>
-
-                        <!-- Final Amount -->
-                        <div class="final-amount">
-                            <div>Final Amount</div>
-                            <div>₹<?php echo number_format($amount, 2); ?></div>
-                        </div>
-
-                        <!-- Pay Button -->
-                        <button type="submit" form="payment-form" name="process_payment" class="btn btn-success btn-lg btn-block mt-3">
-                            Pay ₹<?php echo number_format($amount, 2); ?>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+<section class="bg-slate-950 text-white py-6 border-b border-slate-800">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <a href="my-booking.php" class="text-xs font-semibold text-sky-300 hover:underline">&larr; Back to My Bookings</a>
+      <h1 class="mt-1 text-2xl font-extrabold">Secure Payment Checkout</h1>
     </div>
+    <div class="flex items-center gap-3">
+      <?php if ($order['provider'] === 'sandbox'): ?>
+        <span class="rounded-full border border-sky-400/40 bg-blue-950 px-3 py-1 text-xs font-bold text-sky-300">SANDBOX DEMO GATEWAY</span>
+      <?php endif; ?>
+      <div class="rounded-lg border border-red-500/40 bg-red-950/60 px-4 py-2 text-center" x-data="countdownTimer(<?php echo $secondsRemaining; ?>)">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-red-300">Price Lock Expires</div>
+        <div class="text-base font-extrabold text-white font-mono" x-text="formatted">10:00</div>
+      </div>
+    </div>
+  </div>
+</section>
 
-    <!--Footer -->
-    <?php include('includes/footer.php'); ?>
-    <!-- /Footer-->
+<section class="py-10 flex-1">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-12" x-data="{ method: 'upi', showQr: true }">
+      <!-- Payment Methods -->
+      <div class="lg:col-span-7 space-y-6">
+        <div class="card p-6">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+            <h2 class="text-lg font-extrabold text-slate-950">Select Payment Method</h2>
+            <span class="text-xs font-semibold text-slate-500">Order #<?php echo (int) $bookingNumber; ?></span>
+          </div>
 
-    <!-- Scripts -->
-    <script src="assets/js/jquery.min.js"></script>
-    <script src="assets/js/bootstrap.min.js"></script>
-    <script src="assets/js/interface.js"></script>
+          <form method="post" id="checkout-form" class="space-y-3">
+            <?php echo Csrf::field(); ?>
+            <input type="hidden" name="idempotency_key" value="<?php echo Security::e($idempotencyKey); ?>">
 
-    <script>
-        // Payment method selection
-        function selectPayment(method) {
-            // Remove selected class from all options
-            document.querySelectorAll('.payment-option').forEach(option => {
-                option.classList.remove('selected');
-            });
+            <?php foreach (PaymentService::VALID_METHODS as $key => $label): ?>
+              <label @click="method = '<?php echo $key; ?>'"
+                     :class="method === '<?php echo $key; ?>' ? 'border-blue-700 bg-blue-50/70 ring-1 ring-blue-700' : 'border-slate-200 hover:border-slate-300'"
+                     class="flex cursor-pointer items-center justify-between rounded-xl border p-4 transition">
+                <div class="flex items-center gap-3">
+                  <input type="radio" name="payment_method" value="<?php echo $key; ?>" x-model="method" class="h-4 w-4 text-blue-700 focus:ring-blue-600">
+                  <div>
+                    <div class="text-sm font-bold text-slate-950"><?php echo Security::e($label); ?></div>
+                    <div class="text-xs text-slate-500">Instant confirmation &amp; digital receipt</div>
+                  </div>
+                </div>
+                <span class="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-bold uppercase text-slate-700"><?php echo Security::e($key); ?></span>
+              </label>
+            <?php endforeach; ?>
 
-            // Add selected class to clicked option
-            event.currentTarget.classList.add('selected');
+            <?php if ($order['provider'] === 'razorpay' && !empty($order['razorpay_key'])): ?>
+              <button type="button" id="rzp-pay-btn" class="btn-red w-full !py-3.5 text-base mt-4">
+                Pay ₹<?php echo number_format((float) $order['amount'], 2); ?> via Razorpay
+              </button>
+            <?php else: ?>
+              <button type="submit" name="process_payment" value="1" class="btn-red w-full !py-3.5 text-base mt-4">
+                Complete Payment &bull; ₹<?php echo number_format((float) $order['amount'], 2); ?>
+              </button>
+            <?php endif; ?>
+          </form>
+        </div>
 
-            // Check the radio button
-            document.getElementById(method).checked = true;
+        <?php if (!empty($order['upi_uri'])): ?>
+          <!-- Functional Sandbox QR Section -->
+          <div class="card p-6 text-center" x-show="method === 'upi'">
+            <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-900">Scan Sandbox UPI QR</h3>
+            <p class="mt-1 text-xs text-slate-500">Amount locked to server-verified total: <strong>₹<?php echo number_format((float) $order['amount'], 2); ?></strong></p>
+            <div class="my-4 inline-block rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div id="sandbox-qr-box" class="flex items-center justify-center"></div>
+            </div>
+            <p class="text-[11px] font-mono text-slate-500 break-all"><?php echo Security::e($order['upi_uri']); ?></p>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- Booking Summary -->
+      <aside class="lg:col-span-5">
+        <div class="card p-6 space-y-4">
+          <h2 class="text-lg font-extrabold text-slate-950 border-b border-slate-100 pb-3">Booking Summary</h2>
+          <div class="flex gap-4 items-center">
+            <img src="admin/img/vehicleimages/<?php echo Security::e($booking->Vimage1); ?>" alt="<?php echo Security::e($booking->VehiclesTitle); ?>" class="h-20 w-28 rounded-lg object-cover border border-slate-200">
+            <div>
+              <div class="text-xs font-bold text-blue-700"><?php echo Security::e($booking->BrandName); ?></div>
+              <div class="text-base font-bold text-slate-950"><?php echo Security::e($booking->VehiclesTitle); ?></div>
+              <div class="text-xs text-slate-500"><?php echo Security::e($booking->FuelType); ?> &bull; <?php echo (int) $booking->SeatingCapacity; ?> Seats</div>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2">
+            <div class="flex justify-between">
+              <span class="text-slate-600">Pickup</span>
+              <span class="font-bold text-slate-900"><?php echo Security::e($booking->FromDate); ?></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-600">Drop-off</span>
+              <span class="font-bold text-slate-900"><?php echo Security::e($booking->ToDate); ?></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-600">Hub</span>
+              <span class="font-semibold text-slate-800"><?php echo Security::e($booking->PickupLocation ?? 'DriveX Hub, Guwahati'); ?></span>
+            </div>
+          </div>
+
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between text-slate-600">
+              <span>Base Rental Amount</span>
+              <span>₹<?php echo number_format((float) $booking->Amount, 2); ?></span>
+            </div>
+            <?php if ((float) $booking->DiscountAmount > 0): ?>
+              <div class="flex justify-between text-blue-700 font-semibold">
+                <span>Token Discount (<?php echo (int) $booking->TokensUsed; ?> tokens)</span>
+                <span>- ₹<?php echo number_format((float) $booking->DiscountAmount, 2); ?></span>
+              </div>
+            <?php endif; ?>
+            <div class="border-t border-slate-200 pt-3 flex justify-between items-center">
+              <span class="font-bold text-slate-950">Final Payable</span>
+              <span class="text-2xl font-extrabold text-red-600">₹<?php echo number_format((float) $order['amount'], 2); ?></span>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-sky-200 bg-blue-50 p-3 text-xs text-blue-900">
+            <strong>Cancellation Policy:</strong> Cancel anytime before trip start to automatically refund redeemed loyalty tokens.
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+function countdownTimer(seconds) {
+  return {
+    remaining: seconds,
+    get formatted() {
+      var m = String(Math.floor(this.remaining / 60)).padStart(2, '0');
+      var s = String(this.remaining % 60).padStart(2, '0');
+      return m + ':' + s;
+    },
+    init() {
+      var self = this;
+      var timer = setInterval(function() {
+        if (self.remaining > 0) {
+          self.remaining--;
+        } else {
+          clearInterval(timer);
+          window.location.href = 'my-booking.php';
         }
+      }, 1000);
+    }
+  };
+}
+document.addEventListener('DOMContentLoaded', function() {
+  var qrBox = document.getElementById('sandbox-qr-box');
+  var upiUri = <?php echo json_encode($order['upi_uri'] ?? ''); ?>;
+  if (qrBox && upiUri && typeof QRCode !== 'undefined') {
+    new QRCode(qrBox, { text: upiUri, width: 160, height: 160, colorDark: '#0f172a', colorLight: '#ffffff' });
+  }
+});
+</script>
 
-        // Timer countdown
-        function startTimer(duration, display) {
-            var timer = duration,
-                minutes, seconds;
-            setInterval(function() {
-                minutes = parseInt(timer / 60, 10);
-                seconds = parseInt(timer % 60, 10);
+<?php if ($order['provider'] === 'razorpay' && !empty($order['razorpay_key'])): ?>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+document.getElementById('rzp-pay-btn')?.addEventListener('click', function() {
+  var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  var rzp = new Razorpay({
+    key: <?php echo json_encode($order['razorpay_key']); ?>,
+    amount: <?php echo (int) round((float) $order['amount'] * 100); ?>,
+    currency: 'INR',
+    name: 'DriveX Assam',
+    description: 'Booking #<?php echo (int) $bookingNumber; ?>',
+    order_id: <?php echo json_encode($order['order_id']); ?>,
+    handler: async function(response) {
+      var res = await fetch('api/v1/payments.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({
+          action: 'verify_razorpay',
+          booking_number: <?php echo (int) $bookingNumber; ?>,
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature
+        })
+      });
+      var data = await res.json();
+      if (data.success) {
+        window.location.href = 'payment-success.php?booking_id=<?php echo (int) $bookingNumber; ?>';
+      } else {
+        alert(data.message || 'Verification failed');
+      }
+    }
+  });
+  rzp.open();
+});
+</script>
+<?php endif; ?>
 
-                minutes = minutes < 10 ? "0" + minutes : minutes;
-                seconds = seconds < 10 ? "0" + seconds : seconds;
-
-                display.textContent = minutes + ":" + seconds;
-
-                if (--timer < 0) {
-                    display.textContent = "00:00";
-                    alert("Price lock expired. Please refresh to get updated pricing.");
-                }
-            }, 1000);
-        }
-
-        window.onload = function() {
-            var tenMinutes = 60 * 10,
-                display = document.querySelector('#timer');
-            startTimer(tenMinutes, display);
-        };
-    </script>
-</body>
-
-</html>
+<?php include __DIR__ . '/includes/footer.php'; ?>

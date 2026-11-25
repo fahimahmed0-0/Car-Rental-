@@ -1,265 +1,195 @@
 <?php
-session_start();
-error_reporting(0);
-include('includes/config.php');
-if (strlen($_SESSION['alogin']) == 0) {
-	header('location:index.php');
-} else {
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/config.php';
+
+use App\Core\Security;
+use App\Services\BookingService;
+
+$adminTitle = 'Dashboard';
+$adminNav = 'dashboard';
+include __DIR__ . '/includes/layout_head.php';
+
+(new BookingService($dbh))->expireStalePendingLocks();
+
+$regusers = (int) $dbh->query('SELECT COUNT(*) FROM tblusers')->fetchColumn();
+$totalvehicle = (int) $dbh->query('SELECT COUNT(*) FROM tblvehicles')->fetchColumn();
+$bookings = (int) $dbh->query('SELECT COUNT(*) FROM tblbooking')->fetchColumn();
+$pendingBookings = (int) $dbh->query('SELECT COUNT(*) FROM tblbooking WHERE Status = 0')->fetchColumn();
+$brands = (int) $dbh->query('SELECT COUNT(*) FROM tblbrands')->fetchColumn();
+$subscribers = (int) $dbh->query('SELECT COUNT(*) FROM tblsubscribers')->fetchColumn();
+$queries = (int) $dbh->query('SELECT COUNT(*) FROM tblcontactusquery')->fetchColumn();
+$testimonials = (int) $dbh->query('SELECT COUNT(*) FROM tbltestimonial')->fetchColumn();
+$totalRevenue = (float) $dbh->query("SELECT COALESCE(SUM(amount), 0) FROM tblpaymenttransactions WHERE payment_status = 'completed'")->fetchColumn();
 ?>
-	<!doctype html>
-	<html lang="en" class="no-js">
 
-	<head>
-		<meta charset="UTF-8">
-		<meta http-equiv="X-UA-Compatible" content="IE=edge">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-		<meta name="description" content="Car Rental Portal Admin Dashboard">
-		<meta name="author" content="">
-		<meta name="theme-color" content="#3e454c">
+<div class="space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-extrabold text-slate-950">Admin Command Center</h1>
+      <p class="text-xs text-slate-500">Live fleet, booking, revenue, and AI performance overview</p>
+    </div>
+    <div class="flex gap-2">
+      <a href="manage-bookings.php" class="btn-red !py-2 !text-xs">Pending Bookings (<?php echo $pendingBookings; ?>)</a>
+      <a href="post-avehical.php" class="btn-primary !py-2 !text-xs">+ Add Vehicle</a>
+    </div>
+  </div>
 
-		<title>Car Rental Portal | Admin Dashboard</title>
+  <!-- KPI Grid -->
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <a href="manage-bookings.php" class="card p-5 border-t-4 border-t-red-600 hover:border-red-600 transition">
+      <div class="text-xs font-bold uppercase text-slate-500">Total Bookings</div>
+      <div class="mt-2 text-3xl font-extrabold text-slate-950"><?php echo $bookings; ?></div>
+      <div class="mt-1 text-xs font-semibold text-red-600"><?php echo $pendingBookings; ?> pending review &rarr;</div>
+    </a>
+    <div class="card p-5 border-t-4 border-t-blue-700">
+      <div class="text-xs font-bold uppercase text-slate-500">Verified Revenue</div>
+      <div class="mt-2 text-3xl font-extrabold text-blue-700">₹<?php echo number_format($totalRevenue, 0); ?></div>
+      <div class="mt-1 text-xs text-slate-500">Completed transactions</div>
+    </div>
+    <a href="manage-vehicles.php" class="card p-5 border-t-4 border-t-slate-900 hover:border-slate-900 transition">
+      <div class="text-xs font-bold uppercase text-slate-500">Listed Vehicles</div>
+      <div class="mt-2 text-3xl font-extrabold text-slate-950"><?php echo $totalvehicle; ?></div>
+      <div class="mt-1 text-xs text-slate-600">Across <?php echo $brands; ?> brands &rarr;</div>
+    </a>
+    <a href="reg-users.php" class="card p-5 border-t-4 border-t-sky-500 hover:border-sky-500 transition">
+      <div class="text-xs font-bold uppercase text-slate-500">Registered Users</div>
+      <div class="mt-2 text-3xl font-extrabold text-slate-950"><?php echo $regusers; ?></div>
+      <div class="mt-1 text-xs text-slate-600"><?php echo $queries; ?> queries &bull; <?php echo $testimonials; ?> reviews &rarr;</div>
+    </a>
+  </div>
 
-		<!-- Font awesome -->
-		<link rel="stylesheet" href="css/font-awesome.min.css">
-		<!-- Sandstone Bootstrap CSS -->
-		<link rel="stylesheet" href="css/bootstrap.min.css">
-		<!-- Bootstrap Datatables -->
-		<link rel="stylesheet" href="css/dataTables.bootstrap.min.css">
-		<!-- Bootstrap social button library -->
-		<link rel="stylesheet" href="css/bootstrap-social.css">
-		<!-- Bootstrap select -->
-		<link rel="stylesheet" href="css/bootstrap-select.css">
-		<!-- Bootstrap file input -->
-		<link rel="stylesheet" href="css/fileinput.min.css">
-		<!-- Awesome Bootstrap checkbox -->
-		<link rel="stylesheet" href="css/awesome-bootstrap-checkbox.css">
-		<!-- Admin Style -->
-		<link rel="stylesheet" href="css/style.css">
+  <!-- Analytics Charts (Wired to real DB API) -->
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div class="card p-6 lg:col-span-7">
+      <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-900 mb-4">Revenue Trend (Last 6 Months)</h2>
+      <div class="h-64">
+        <canvas id="revenueChart"></canvas>
+      </div>
+    </div>
+    <div class="card p-6 lg:col-span-5">
+      <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-900 mb-4">Booking Status Breakdown</h2>
+      <div class="h-64">
+        <canvas id="statusChart"></canvas>
+      </div>
+    </div>
+  </div>
 
-		<!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
-		<!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
-		<!--[if lt IE 9]>
-		<script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
-		<script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
-	<![endif]-->
-	</head>
+  <!-- AI Dynamic Pricing Advisor + Secondary Stats -->
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-12" x-data="pricingAdvisor()">
+    <div class="card p-6 lg:col-span-8">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">
+        <div>
+          <h2 class="text-base font-extrabold text-slate-950">Fleet Utilization &amp; Pricing Advisor</h2>
+          <p class="text-xs text-slate-500">Data-backed rate recommendations with deterministic SQL fallback</p>
+        </div>
+        <button type="button" @click="loadInsights()" :disabled="pricingLoading" class="btn-outline !py-1.5 !text-xs">
+          <span x-show="!pricingLoading">Generate Insights</span>
+          <span x-show="pricingLoading">Analyzing...</span>
+        </button>
+      </div>
+      <div x-show="pricingMeta" x-text="pricingMeta" class="mb-3 text-[11px] font-semibold text-blue-700"></div>
+      <template x-if="pricingTips.length === 0">
+        <p class="text-xs text-slate-500">Click "Generate Insights" to analyze vehicle demand, idle inventory, and suggested seasonal rate adjustments.</p>
+      </template>
+      <div class="space-y-2.5">
+        <template x-for="(tip, idx) in pricingTips" :key="idx">
+          <div class="rounded-lg border border-sky-200 bg-blue-50/60 p-3 text-xs">
+            <div class="font-bold text-slate-950" x-text="tip.title"></div>
+            <div class="mt-0.5 text-slate-700" x-text="tip.detail"></div>
+          </div>
+        </template>
+      </div>
+    </div>
 
-	<body>
-		<?php include('includes/header.php'); ?>
+    <div class="card p-6 lg:col-span-4 space-y-3">
+      <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-2">Quick Operations</h2>
+      <a href="manage-conactusquery.php" class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-xs font-semibold hover:bg-blue-50">
+        <span>Contact Inquiries</span><span class="font-extrabold text-blue-700"><?php echo $queries; ?></span>
+      </a>
+      <a href="testimonials.php" class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-xs font-semibold hover:bg-blue-50">
+        <span>Testimonials</span><span class="font-extrabold text-blue-700"><?php echo $testimonials; ?></span>
+      </a>
+      <a href="manage-subscribers.php" class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-xs font-semibold hover:bg-blue-50">
+        <span>Newsletter Subscribers</span><span class="font-extrabold text-blue-700"><?php echo $subscribers; ?></span>
+      </a>
+      <a href="mail-outbox.php" class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-xs font-semibold hover:bg-blue-50">
+        <span>Local Mail Outbox</span><span class="font-extrabold text-red-600">View &rarr;</span>
+      </a>
+    </div>
+  </div>
+</div>
 
-		<div class="ts-main-content">
-			<?php include('includes/leftbar.php'); ?>
-			<div class="content-wrapper">
-				<div class="container-fluid">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+function pricingAdvisor() {
+  return {
+    pricingLoading: false,
+    pricingTips: [],
+    pricingMeta: '',
+    async loadInsights() {
+      this.pricingLoading = true;
+      var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      try {
+        var res = await fetch('../api/v1/ai.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({ action: 'pricing_insights' })
+        });
+        var data = await res.json();
+        if (data.success) {
+          this.pricingTips = data.insights || [];
+          this.pricingMeta = 'Engine: ' + (data.tier_label || 'SQL Utilization Engine');
+        }
+      } catch (e) {}
+      this.pricingLoading = false;
+    }
+  };
+}
 
-					<div class="row">
-						<div class="col-md-12">
+document.addEventListener('DOMContentLoaded', async function() {
+  try {
+    var res = await fetch('../api/v1/admin-analytics.php');
+    var data = await res.json();
+    if (!data.success) return;
 
-							<h2 class="page-title">Dashboard</h2>
+    var labels = (data.monthly || []).map(function(m) { return m.label; });
+    var revenues = (data.monthly || []).map(function(m) { return Number(m.revenue); });
+    if (labels.length === 0) {
+      labels = ['No Data'];
+      revenues = [0];
+    }
 
-							<div class="row">
-								<div class="col-md-12">
-									<div class="row">
-										<div class="col-md-3">
-											<div class="panel panel-default">
-												<div class="panel-body bk-primary text-light">
-													<div class="stat-panel text-center">
-														<?php
-														$sql = "SELECT id from tblusers ";
-														$query = $dbh->prepare($sql);
-														$query->execute();
-														$results = $query->fetchAll(PDO::FETCH_OBJ);
-														$regusers = $query->rowCount();
-														?>
-														<div class="stat-panel-number h1 "><?php echo htmlentities($regusers); ?></div>
-														<div class="stat-panel-title text-uppercase">Reg Users</div>
-													</div>
-												</div>
-												<a href="reg-users.php" class="block-anchor panel-footer">Full Detail <i class="fa fa-arrow-right"></i></a>
-											</div>
-										</div>
-										<div class="col-md-3">
-											<div class="panel panel-default">
-												<div class="panel-body bk-success text-light">
-													<div class="stat-panel text-center">
-														<?php
-														$sql1 = "SELECT id from tblvehicles ";
-														$query1 = $dbh->prepare($sql1);;
-														$query1->execute();
-														$results1 = $query1->fetchAll(PDO::FETCH_OBJ);
-														$totalvehicle = $query1->rowCount();
-														?>
-														<div class="stat-panel-number h1 "><?php echo htmlentities($totalvehicle); ?></div>
-														<div class="stat-panel-title text-uppercase">Listed Vehicles</div>
-													</div>
-												</div>
-												<a href="manage-vehicles.php" class="block-anchor panel-footer text-center">Full Detail &nbsp; <i class="fa fa-arrow-right"></i></a>
-											</div>
-										</div>
-										<div class="col-md-3">
-											<div class="panel panel-default">
-												<div class="panel-body bk-info text-light">
-													<div class="stat-panel text-center">
-														<?php
-														$sql2 = "SELECT id from tblbooking ";
-														$query2 = $dbh->prepare($sql2);
-														$query2->execute();
-														$results2 = $query2->fetchAll(PDO::FETCH_OBJ);
-														$bookings = $query2->rowCount();
-														?>
+    var revCtx = document.getElementById('revenueChart');
+    if (revCtx && typeof Chart !== 'undefined') {
+      new Chart(revCtx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{ label: 'Revenue (₹)', data: revenues, backgroundColor: '#1d4ed8', borderRadius: 6 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
 
-														<div class="stat-panel-number h1 "><?php echo htmlentities($bookings); ?></div>
-														<div class="stat-panel-title text-uppercase">Total Bookings</div>
-													</div>
-												</div>
-												<a href="manage-bookings.php" class="block-anchor panel-footer text-center">Full Detail &nbsp; <i class="fa fa-arrow-right"></i></a>
-											</div>
-										</div>
-										<div class="col-md-3">
-											<div class="panel panel-default">
-												<div class="panel-body bk-warning text-light">
-													<div class="stat-panel text-center">
-														<?php
-														$sql3 = "SELECT id from tblbrands ";
-														$query3 = $dbh->prepare($sql3);
-														$query3->execute();
-														$results3 = $query3->fetchAll(PDO::FETCH_OBJ);
-														$brands = $query3->rowCount();
-														?>
-														<div class="stat-panel-number h1 "><?php echo htmlentities($brands); ?></div>
-														<div class="stat-panel-title text-uppercase">Listed Brands</div>
-													</div>
-												</div>
-												<a href="manage-brands.php" class="block-anchor panel-footer text-center">Full Detail &nbsp; <i class="fa fa-arrow-right"></i></a>
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
+    var sc = data.status_counts || {};
+    var stCtx = document.getElementById('statusChart');
+    if (stCtx && typeof Chart !== 'undefined') {
+      new Chart(stCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Pending', 'Confirmed', 'Active', 'Completed', 'Cancelled', 'Expired'],
+          datasets: [{
+            data: [sc.pending || 0, sc.confirmed || 0, sc.active || 0, sc.completed || 0, sc.cancelled || 0, sc.expired || 0],
+            backgroundColor: ['#38bdf8', '#1d4ed8', '#0f172a', '#2563eb', '#dc2626', '#94a3b8']
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+  } catch (e) {}
+});
+</script>
 
-
-
-					<div class="row">
-						<div class="col-md-12">
-
-
-							<div class="row">
-								<div class="col-md-12">
-									<div class="row">
-										<div class="col-md-3">
-											<div class="panel panel-default">
-												<div class="panel-body bk-primary text-light">
-													<div class="stat-panel text-center">
-														<?php
-														$sql4 = "SELECT id from tblsubscribers ";
-														$query4 = $dbh->prepare($sql4);
-														$query4->execute();
-														$results4 = $query4->fetchAll(PDO::FETCH_OBJ);
-														$subscribers = $query4->rowCount();
-														?>
-														<div class="stat-panel-number h1 "><?php echo htmlentities($subscribers); ?></div>
-														<div class="stat-panel-title text-uppercase">Subscibers</div>
-													</div>
-												</div>
-												<a href="manage-subscribers.php" class="block-anchor panel-footer">Full Detail <i class="fa fa-arrow-right"></i></a>
-											</div>
-										</div>
-										<div class="col-md-3">
-											<div class="panel panel-default">
-												<div class="panel-body bk-success text-light">
-													<div class="stat-panel text-center">
-														<?php
-														$sql6 = "SELECT id from tblcontactusquery ";
-														$query6 = $dbh->prepare($sql6);;
-														$query6->execute();
-														$results6 = $query6->fetchAll(PDO::FETCH_OBJ);
-														$query = $query6->rowCount();
-														?>
-														<div class="stat-panel-number h1 "><?php echo htmlentities($query); ?></div>
-														<div class="stat-panel-title text-uppercase">Queries</div>
-													</div>
-												</div>
-												<a href="manage-conactusquery.php" class="block-anchor panel-footer text-center">Full Detail &nbsp; <i class="fa fa-arrow-right"></i></a>
-											</div>
-										</div>
-										<div class="col-md-3">
-											<div class="panel panel-default">
-												<div class="panel-body bk-info text-light">
-													<div class="stat-panel text-center">
-														<?php
-														$sql5 = "SELECT id from tbltestimonial ";
-														$query5 = $dbh->prepare($sql5);
-														$query5->execute();
-														$results5 = $query5->fetchAll(PDO::FETCH_OBJ);
-														$testimonials = $query5->rowCount();
-														?>
-
-														<div class="stat-panel-number h1 "><?php echo htmlentities($testimonials); ?></div>
-														<div class="stat-panel-title text-uppercase">Testimonials</div>
-													</div>
-												</div>
-												<a href="testimonials.php" class="block-anchor panel-footer text-center">Full Detail &nbsp; <i class="fa fa-arrow-right"></i></a>
-											</div>
-										</div>
-
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
-
-
-
-
-
-
-
-
-				</div>
-			</div>
-		</div>
-
-		<!-- Loading Scripts -->
-		<script src="js/jquery.min.js"></script>
-		<script src="js/bootstrap-select.min.js"></script>
-		<script src="js/bootstrap.min.js"></script>
-		<script src="js/jquery.dataTables.min.js"></script>
-		<script src="js/dataTables.bootstrap.min.js"></script>
-		<script src="js/Chart.min.js"></script>
-		<script src="js/fileinput.js"></script>
-		<script src="js/chartData.js"></script>
-		<script src="js/main.js"></script>
-
-		<script>
-			window.onload = function() {
-
-				// Line chart from swirlData for dashReport
-				var ctx = document.getElementById("dashReport").getContext("2d");
-				window.myLine = new Chart(ctx).Line(swirlData, {
-					responsive: true,
-					scaleShowVerticalLines: false,
-					scaleBeginAtZero: true,
-					multiTooltipTemplate: "<%if (label){%><%=label%>: <%}%><%= value %>",
-				});
-
-				// Pie Chart from doughutData
-				var doctx = document.getElementById("chart-area3").getContext("2d");
-				window.myDoughnut = new Chart(doctx).Pie(doughnutData, {
-					responsive: true
-				});
-
-				// Dougnut Chart from doughnutData
-				var doctx = document.getElementById("chart-area4").getContext("2d");
-				window.myDoughnut = new Chart(doctx).Doughnut(doughnutData, {
-					responsive: true
-				});
-
-			}
-		</script>
-	</body>
-
-	</html>
-<?php } ?>
+<?php include __DIR__ . '/includes/layout_foot.php'; ?>

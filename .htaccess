@@ -1,0 +1,11 @@
+Options -Indexes
+
+# Block direct HTTP access to sensitive files and internal directories
+<FilesMatch "^\.env|\.sql$|\.md$|^composer\.(json|lock)$|^package(-lock)?\.json$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(src|database|storage|tests)/ - [F,L]
+</IfModule>

@@ -1,720 +1,408 @@
 <?php
-  session_start();
-  include('includes/config.php');
 
-  use PHPMailer\PHPMailer\PHPMailer;
-  use PHPMailer\PHPMailer\SMTP;
-  use PHPMailer\PHPMailer\Exception;
+declare(strict_types=1);
 
-  error_reporting(0);
-  if (isset($_POST['submit'])) {
-    $fromdate = $_POST['fromdate'];
-    $todate = $_POST['todate'];
-    $message = $_POST['message'];
-    $useremail = $_SESSION['login'];
-    $status = 0;
-    $vhid = $_GET['vhid'];
-    $bookingno = mt_rand(100000000, 999999999);
+require_once __DIR__ . '/includes/config.php';
 
-    // First check if the car is available for the selected dates
-    $ret = "SELECT * FROM tblbooking where (:fromdate BETWEEN date(FromDate) and date(ToDate) || :todate BETWEEN date(FromDate) and date(ToDate) || date(FromDate) BETWEEN :fromdate and :todate) and VehicleId=:vhid";
-    $query1 = $dbh->prepare($ret);
-    $query1->bindParam(':vhid', $vhid, PDO::PARAM_STR);
-    $query1->bindParam(':fromdate', $fromdate, PDO::PARAM_STR);
-    $query1->bindParam(':todate', $todate, PDO::PARAM_STR);
-    $query1->execute();
-    $results1 = $query1->fetchAll(PDO::FETCH_OBJ);
+use App\Core\Csrf;
+use App\Core\Security;
+use App\Core\Session;
+use App\Services\BookingService;
+use App\Services\PricingService;
+use App\Services\TokenLedgerService;
 
-    if ($query1->rowCount() == 0) {
-      // Car is available, now process token redemption if requested
-      $tokensToRedeem = isset($_POST['redeem_tokens']) ? intval($_POST['redeem_tokens']) : 0;
-      $discountAmount = 0;
+$vhid = isset($_GET['vhid']) ? (int) $_GET['vhid'] : 0;
+if ($vhid <= 0) {
+    Security::redirect('car-listing.php');
+}
 
-      if ($tokensToRedeem > 0) {
-        // Check if user has enough tokens
-        $sql = "SELECT tokenBalance FROM tblcustomertokens WHERE userEmail = :email";
-        $query = $dbh->prepare($sql);
-        $query->bindParam(':email', $useremail, PDO::PARAM_STR);
-        $query->execute();
-        $currentTokens = $query->fetchColumn();
+$bookingSvc = new BookingService($dbh);
+$bookingSvc->expireStalePendingLocks();
 
-        if ($tokensToRedeem < 15) {
-          echo "<script>alert('Minimum 15 tokens required for redemption');</script>";
-          echo "<script type='text/javascript'> document.location = 'car-listing.php'; </script>";
-          exit;
-        }
-
-        if ($currentTokens < $tokensToRedeem) {
-          echo "<script>alert('Insufficient token balance');</script>";
-          echo "<script type='text/javascript'> document.location = 'car-listing.php'; </script>";
-          exit;
-        }
-
-        // Calculate discount (5 tokens = ₹100)
-        $discountAmount = ($tokensToRedeem / 5) * 100;
-
-        // Start transaction for token redemption and booking
-        $dbh->beginTransaction();
-
-        try {
-          // Deduct tokens and record redemption
-          $sql = "UPDATE tblcustomertokens SET tokenBalance = tokenBalance - :tokens WHERE userEmail = :email";
-          $query = $dbh->prepare($sql);
-          $query->bindParam(':email', $useremail, PDO::PARAM_STR);
-          $query->bindParam(':tokens', $tokensToRedeem, PDO::PARAM_INT);
-          $query->execute();
-
-          $sql = "INSERT INTO tbltokenredemption (userEmail, tokensRedeemed, discountAmount, bookingId) VALUES (:email, :tokens, :discount, :booking)";
-          $query = $dbh->prepare($sql);
-          $query->bindParam(':email', $useremail, PDO::PARAM_STR);
-          $query->bindParam(':tokens', $tokensToRedeem, PDO::PARAM_INT);
-          $query->bindParam(':discount', $discountAmount, PDO::PARAM_STR);
-          $query->bindParam(':booking', $bookingno, PDO::PARAM_STR);
-          $query->execute();
-
-          // Insert booking record
-          $sql = "INSERT INTO tblbooking(BookingNumber,userEmail,VehicleId,FromDate,ToDate,message,Status) VALUES(:bookingno,:useremail,:vhid,:fromdate,:todate,:message,:status)";
-          $query = $dbh->prepare($sql);
-          $query->bindParam(':bookingno', $bookingno, PDO::PARAM_STR);
-          $query->bindParam(':useremail', $useremail, PDO::PARAM_STR);
-          $query->bindParam(':vhid', $vhid, PDO::PARAM_STR);
-          $query->bindParam(':fromdate', $fromdate, PDO::PARAM_STR);
-          $query->bindParam(':todate', $todate, PDO::PARAM_STR);
-          $query->bindParam(':message', $message, PDO::PARAM_STR);
-          $query->bindParam(':status', $status, PDO::PARAM_STR);
-          $query->execute();
-
-          // If everything is successful, commit the transaction
-          $dbh->commit();
-
-          // Send email notification
-          try {
-            require 'PHPMailer/Exception.php';
-            require 'PHPMailer/PHPMailer.php';
-            require 'PHPMailer/SMTP.php';
-            $mail = new PHPMailer(true);
-            //Server settings                   //Enable verbose debug output
-            $mail->isSMTP();                                            //Send using SMTP
-            $mail->Host       = getenv('SMTP_HOST') ? getenv('SMTP_HOST') : 'smtp.example.com';  //Set the SMTP server to send through
-            $mail->SMTPAuth   = true;                                   //Enable SMTP authentication
-            $mail->Username   = getenv('SMTP_USER') ? getenv('SMTP_USER') : '';  //SMTP username
-            $mail->Password   = getenv('SMTP_PASS') ? getenv('SMTP_PASS') : '';  //SMTP password
-            $mail->SMTPSecure = getenv('SMTP_SECURE') ? getenv('SMTP_SECURE') : 'tls';  //Enable TLS encryption
-            $mail->Port       = getenv('SMTP_PORT') ? getenv('SMTP_PORT') : 587;  //TCP port to connect to
-
-            // Additional settings to help prevent errors
-            $mail->SMTPOptions = array(
-              'ssl' => array(
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-                'allow_self_signed' => true
-              )
-            );
-
-            //Recipients
-            $mail->setFrom(getenv('EMAIL_FROM') ? getenv('EMAIL_FROM') : 'noreply@example.com', getenv('EMAIL_FROM_NAME') ? getenv('EMAIL_FROM_NAME') : 'Car Rental');
-            $mail->addAddress(getenv('EMAIL_TO') ? getenv('EMAIL_TO') : 'contact@example.com', getenv('EMAIL_TO_NAME') ? getenv('EMAIL_TO_NAME') : 'Admin');
-
-            //Content
-            $mail->isHTML(true);                                  //Set email format to HTML
-            $mail->Subject = 'New Car Booking - ' . $bookingno;
-            // Get user details from the database
-            $sql = "SELECT FullName, ContactNo, EmailId FROM tblusers WHERE EmailId=:useremail";
-            $query = $dbh->prepare($sql);
-            $query->bindParam(':useremail', $useremail, PDO::PARAM_STR);
-            $query->execute();
-            $user = $query->fetch(PDO::FETCH_OBJ);
-
-            // Get vehicle details
-            $sql = "SELECT tblvehicles.VehiclesTitle, tblbrands.BrandName 
-                  FROM tblvehicles 
-                  JOIN tblbrands ON tblbrands.id=tblvehicles.VehiclesBrand 
-                  WHERE tblvehicles.id=:vhid";
-            $query = $dbh->prepare($sql);
-            $query->bindParam(':vhid', $vhid, PDO::PARAM_STR);
-            $query->execute();
-            $vehicle = $query->fetch(PDO::FETCH_OBJ);
-
-            $mail->Body    = "Booking Details:<br><br>" .
-              "Customer Name: " . $user->FullName . "<br>" .
-              "Contact Number: " . $user->ContactNo . "<br>" .
-              "Email: " . $user->EmailId . "<br><br>" .
-              "Vehicle: " . $vehicle->BrandName . " " . $vehicle->VehiclesTitle . "<br>" .
-              "From Date: " . $fromdate . "<br>" .
-              "To Date: " . $todate . "<br>" .
-              "Message: " . $message . "<br>" .
-              "Booking Number: " . $bookingno;
-
-            $mail->send();
-          } catch (Exception $e) {
-            error_log("Email Error: " . $mail->ErrorInfo);
-            // Don't exit on email error, just log it
-          }
-
-          echo "<script>alert('Booking successful.');</script>";
-          echo "<script type='text/javascript'> document.location = 'my-booking.php'; </script>";
-        } catch (Exception $e) {
-          // If anything goes wrong, rollback the transaction
-          $dbh->rollBack();
-          error_log("Booking Error: " . $e->getMessage());
-          echo "<script>alert('Something went wrong. Please try again');</script>";
-          echo "<script type='text/javascript'> document.location = 'car-listing.php'; </script>";
-        }
-      } else {
-        // No token redemption, just process the booking
-        $sql = "INSERT INTO tblbooking(BookingNumber,userEmail,VehicleId,FromDate,ToDate,message,Status) VALUES(:bookingno,:useremail,:vhid,:fromdate,:todate,:message,:status)";
-        $query = $dbh->prepare($sql);
-        $query->bindParam(':bookingno', $bookingno, PDO::PARAM_STR);
-        $query->bindParam(':useremail', $useremail, PDO::PARAM_STR);
-        $query->bindParam(':vhid', $vhid, PDO::PARAM_STR);
-        $query->bindParam(':fromdate', $fromdate, PDO::PARAM_STR);
-        $query->bindParam(':todate', $todate, PDO::PARAM_STR);
-        $query->bindParam(':message', $message, PDO::PARAM_STR);
-        $query->bindParam(':status', $status, PDO::PARAM_STR);
-        $query->execute();
-        $lastInsertId = $dbh->lastInsertId();
-
-
-        // Send email notification
-        try {
-          require 'PHPMailer/Exception.php';
-          require 'PHPMailer/PHPMailer.php';
-          require 'PHPMailer/SMTP.php';
-          $mail = new PHPMailer(true);
-          $mail->isSMTP();
-          $mail->Host       = getenv('SMTP_HOST') ? getenv('SMTP_HOST') : 'smtp.example.com';
-          $mail->SMTPAuth   = true;
-          $mail->Username   = getenv('SMTP_USER') ? getenv('SMTP_USER') : '';
-          $mail->Password   = getenv('SMTP_PASS') ? getenv('SMTP_PASS') : '';
-          $mail->SMTPSecure = getenv('SMTP_SECURE') ? getenv('SMTP_SECURE') : 'tls';
-          $mail->Port       = getenv('SMTP_PORT') ? getenv('SMTP_PORT') : 587;
-          $mail->SMTPOptions = array(
-            'ssl' => array(
-              'verify_peer' => false,
-              'verify_peer_name' => false,
-              'allow_self_signed' => true
-            )
-          );
-          $mail->setFrom(getenv('EMAIL_FROM') ? getenv('EMAIL_FROM') : 'noreply@example.com', getenv('EMAIL_FROM_NAME') ? getenv('EMAIL_FROM_NAME') : 'Car Rental');
-          $mail->addAddress(getenv('EMAIL_TO') ? getenv('EMAIL_TO') : 'contact@example.com', getenv('EMAIL_TO_NAME') ? getenv('EMAIL_TO_NAME') : 'Admin');
-          $mail->isHTML(true);
-          $mail->Subject = 'New Car Booking - ' . $bookingno;
-
-          // Get user details from the database
-          $sql = "SELECT FullName, ContactNo, EmailId FROM tblusers WHERE EmailId=:useremail";
-          $query = $dbh->prepare($sql);
-          $query->bindParam(':useremail', $useremail, PDO::PARAM_STR);
-          $query->execute();
-          $user = $query->fetch(PDO::FETCH_OBJ);
-
-          // Get vehicle details
-          $sql = "SELECT tblvehicles.VehiclesTitle, tblbrands.BrandName 
-                  FROM tblvehicles 
-                  JOIN tblbrands ON tblbrands.id=tblvehicles.VehiclesBrand 
-                  WHERE tblvehicles.id=:vhid";
-          $query = $dbh->prepare($sql);
-          $query->bindParam(':vhid', $vhid, PDO::PARAM_STR);
-          $query->execute();
-          $vehicle = $query->fetch(PDO::FETCH_OBJ);
-
-          $mail->Body    = "Booking Details:<br><br>" .
-            "Customer Name: " . $user->FullName . "<br>" .
-            "Contact Number: " . $user->ContactNo . "<br>" .
-            "Email: " . $user->EmailId . "<br><br>" .
-            "Vehicle: " . $vehicle->BrandName . " " . $vehicle->VehiclesTitle . "<br>" .
-            "From Date: " . $fromdate . "<br>" .
-            "To Date: " . $todate . "<br>" .
-            "Message: " . $message . "<br>" .
-            "Booking Number: " . $bookingno;
-
-          $mail->send();
-        } catch (Exception $e) {
-          error_log("Email Error: " . $mail->ErrorInfo);
-        }
-
-        if ($lastInsertId) {
-          echo "<script>alert('Booking successful.');</script>";
-          echo "<script type='text/javascript'> document.location = 'my-booking.php'; </script>";
-        } else {
-          echo "<script>alert('Something went wrong. Please try again');</script>";
-          echo "<script type='text/javascript'> document.location = 'car-listing.php'; </script>";
-        }
-      }
-    } else {
-      echo "<script>alert('Car already booked for these days');</script>";
-      echo "<script type='text/javascript'> document.location = 'car-listing.php'; </script>";
+// Handle booking POST BEFORE HTML output
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_submit'])) {
+    Csrf::requireValid();
+    if (empty($_SESSION['login'])) {
+        Session::setFlash('error', 'Please sign in to book a vehicle.');
+        Security::redirect('vehical-details.php?vhid=' . $vhid);
     }
-  }
-  ?>
 
- <!DOCTYPE HTML>
- <html lang="en">
+    try {
+        $mode = ($_POST['booking_mode'] ?? 'pay_now') === 'pay_at_pickup' ? 'pay_at_pickup' : 'pay_now';
+        $result = $bookingSvc->createBooking(
+            (string) $_SESSION['login'],
+            $vhid,
+            (string) ($_POST['fromdate'] ?? ''),
+            (string) ($_POST['todate'] ?? ''),
+            (string) ($_POST['message'] ?? ''),
+            (int) ($_POST['redeem_tokens'] ?? 0),
+            $mode,
+            (string) ($_POST['pickup_location'] ?? 'DriveX Hub, Guwahati, Assam'),
+            (string) ($_POST['dropoff_location'] ?? 'DriveX Hub, Guwahati, Assam')
+        );
 
- <head>
-   <title>Car Rental | Vehicle Details</title>
-   <!--Bootstrap -->
-   <link rel="stylesheet" href="assets/css/bootstrap.min.css" type="text/css">
-   <!--Custome Style -->
-   <link rel="stylesheet" href="assets/css/style.css" type="text/css">
-   <!--OWL Carousel slider-->
-   <link rel="stylesheet" href="assets/css/owl.carousel.css" type="text/css">
-   <link rel="stylesheet" href="assets/css/owl.transitions.css" type="text/css">
-   <!--slick-slider -->
-   <link href="assets/css/slick.css" rel="stylesheet">
-   <!--bootstrap-slider -->
-   <link href="assets/css/bootstrap-slider.min.css" rel="stylesheet">
-   <!--FontAwesome Font Style -->
-   <link href="assets/css/font-awesome.min.css" rel="stylesheet">
+        if ($mode === 'pay_now') {
+            Security::redirect('payment.php?booking_id=' . $result['booking_number']);
+        }
+        Session::setFlash('success', 'Reservation #' . $result['booking_number'] . ' submitted! Awaiting admin confirmation.');
+        Security::redirect('my-booking.php');
+    } catch (Throwable $e) {
+        Session::setFlash('error', $e->getMessage());
+        Security::redirect('vehical-details.php?vhid=' . $vhid);
+    }
+}
 
-   <!-- SWITCHER -->
-   <link rel="stylesheet" id="switcher-css" type="text/css" href="assets/switcher/css/switcher.css" media="all" />
-   <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/red.css" title="red" media="all" data-default-color="true" />
-   <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/orange.css" title="orange" media="all" />
-   <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/blue.css" title="blue" media="all" />
-   <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/pink.css" title="pink" media="all" />
-   <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/green.css" title="green" media="all" />
-   <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/purple.css" title="purple" media="all" />
-   <link rel="apple-touch-icon-precomposed" sizes="144x144" href="assets/images/favicon-icon/apple-touch-icon-144-precomposed.png">
-   <link rel="apple-touch-icon-precomposed" sizes="114x114" href="assets/images/favicon-icon/apple-touch-icon-114-precomposed.html">
-   <link rel="apple-touch-icon-precomposed" sizes="72x72" href="assets/images/favicon-icon/apple-touch-icon-72-precomposed.png">
-   <link rel="apple-touch-icon-precomposed" href="assets/images/favicon-icon/apple-touch-icon-57-precomposed.png">
-   <link rel="shortcut icon" href="assets/images/favicon-icon/favicon.png">
-   <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700,900" rel="stylesheet">
- </head>
+$vStmt = $dbh->prepare(
+    'SELECT v.*, b.BrandName, b.id AS bid
+     FROM tblvehicles v
+     JOIN tblbrands b ON b.id = v.VehiclesBrand
+     WHERE v.id = :vhid LIMIT 1'
+);
+$vStmt->execute([':vhid' => $vhid]);
+$vehicle = $vStmt->fetch();
 
- <body>
+if (!$vehicle) {
+    Session::setFlash('error', 'Vehicle not found.');
+    Security::redirect('car-listing.php');
+}
 
-   <!-- Start Switcher -->
-   <?php include('includes/colorswitcher.php'); ?>
-   <!-- /Switcher -->
+$images = array_values(array_filter([
+    $vehicle->Vimage1 ?? '',
+    $vehicle->Vimage2 ?? '',
+    $vehicle->Vimage3 ?? '',
+    $vehicle->Vimage4 ?? '',
+    $vehicle->Vimage5 ?? '',
+], static fn (string $img): bool => trim($img) !== ''));
 
-   <!--Header-->
-   <?php include('includes/header.php'); ?>
-   <!-- /Header -->
+$accessories = [
+    'AirConditioner' => 'Air Conditioner',
+    'AntiLockBrakingSystem' => 'ABS (Anti-Lock Braking)',
+    'PowerSteering' => 'Power Steering',
+    'PowerWindows' => 'Power Windows',
+    'DriverAirbag' => 'Driver Airbag',
+    'PassengerAirbag' => 'Passenger Airbag',
+    'PowerDoorLocks' => 'Power Door Locks',
+    'CentralLocking' => 'Central Locking',
+    'BrakeAssist' => 'Brake Assist',
+    'CrashSensor' => 'Crash Sensor',
+    'LeatherSeats' => 'Leather Seats',
+    'CDPlayer' => 'Audio / Infotainment',
+];
 
-   <!--Listing-Image-Slider-->
+$bookedRanges = $bookingSvc->getBookedDateRanges($vhid);
 
-   <?php
-    $vhid = intval($_GET['vhid']);
-    $sql = "SELECT tblvehicles.*,tblbrands.BrandName,tblbrands.id as bid  from tblvehicles join tblbrands on tblbrands.id=tblvehicles.VehiclesBrand where tblvehicles.id=:vhid";
-    $query = $dbh->prepare($sql);
-    $query->bindParam(':vhid', $vhid, PDO::PARAM_STR);
-    $query->execute();
-    $results = $query->fetchAll(PDO::FETCH_OBJ);
-    $cnt = 1;
-    if ($query->rowCount() > 0) {
-      foreach ($results as $result) {
-        $_SESSION['brndid'] = $result->bid;
-    ?>
+$tokenBalance = 0;
+if (!empty($_SESSION['login'])) {
+    $tokenBalance = (new TokenLedgerService($dbh))->getBalance((string) $_SESSION['login'])['balance'];
+}
 
-       <section id="listing_img_slider">
-         <div><img src="admin/img/vehicleimages/<?php echo htmlentities($result->Vimage1); ?>" class="img-responsive" alt="image" width="900" height="560"></div>
-         <div><img src="admin/img/vehicleimages/<?php echo htmlentities($result->Vimage2); ?>" class="img-responsive" alt="image" width="900" height="560"></div>
-         <div><img src="admin/img/vehicleimages/<?php echo htmlentities($result->Vimage3); ?>" class="img-responsive" alt="image" width="900" height="560"></div>
-         <div><img src="admin/img/vehicleimages/<?php echo htmlentities($result->Vimage4); ?>" class="img-responsive" alt="image" width="900" height="560"></div>
-         <?php if ($result->Vimage5 == "") {
-          } else {
-          ?>
-           <div><img src="admin/img/vehicleimages/<?php echo htmlentities($result->Vimage5); ?>" class="img-responsive" alt="image" width="900" height="560"></div>
-         <?php } ?>
-       </section>
-       <!--/Listing-Image-Slider-->
+// Similar available vehicles (excluding current car!)
+$simStmt = $dbh->prepare(
+    'SELECT v.id, v.VehiclesTitle, v.PricePerDay, v.FuelType, v.ModelYear, v.SeatingCapacity, v.Vimage1, b.BrandName
+     FROM tblvehicles v
+     JOIN tblbrands b ON b.id = v.VehiclesBrand
+     WHERE v.id != :vhid
+     ORDER BY (v.VehiclesBrand = :bid) DESC, v.id DESC
+     LIMIT 4'
+);
+$simStmt->execute([':vhid' => $vhid, ':bid' => (int) $vehicle->bid]);
+$similarCars = $simStmt->fetchAll();
 
+$prefillFrom = trim((string) ($_GET['from_date'] ?? date('Y-m-d')));
+$prefillTo = trim((string) ($_GET['to_date'] ?? date('Y-m-d', strtotime('+1 day'))));
+$today = date('Y-m-d');
 
-       <!--Listing-detail-->
-       <section class="listing-detail">
-         <div class="container">
-           <div class="listing_detail_head row">
-             <div class="col-md-9">
-               <h2><?php echo htmlentities($result->BrandName); ?> , <?php echo htmlentities($result->VehiclesTitle); ?></h2>
-             </div>
-             <div class="col-md-3">
-               <div class="price_info">
-                 <p>₹<?php echo htmlentities($result->PricePerDay); ?> </p>Per Day
-               </div>
-             </div>
-           </div>
-           <div class="row">
-             <div class="col-md-9">
-               <div class="main_features">
-                 <ul>
-                   <li> <i class="fa fa-calendar" aria-hidden="true"></i>
-                     <h5><?php echo htmlentities($result->ModelYear); ?></h5>
-                     <p>Reg.Year</p>
-                   </li>
-                   <li> <i class="fa fa-cogs" aria-hidden="true"></i>
-                     <h5><?php echo htmlentities($result->FuelType); ?></h5>
-                     <p>Fuel Type</p>
-                   </li>
-                   <li> <i class="fa fa-user-plus" aria-hidden="true"></i>
-                     <h5><?php echo htmlentities($result->SeatingCapacity); ?></h5>
-                     <p>Seats</p>
-                   </li>
-                 </ul>
-               </div>
-               <div class="listing_more_info">
-                 <div class="listing_detail_wrap">
-                   <!-- Nav tabs -->
-                   <ul class="nav nav-tabs gray-bg" role="tablist">
-                     <li role="presentation" class="active"><a href="#vehicle-overview " aria-controls="vehicle-overview" role="tab" data-toggle="tab">Vehicle Overview </a></li>
-                     <li role="presentation"><a href="#accessories" aria-controls="accessories" role="tab" data-toggle="tab">Accessories</a></li>
-                   </ul>
+$pageTitle = 'DriveX Assam | ' . $vehicle->BrandName . ' ' . $vehicle->VehiclesTitle;
+$activeNav = 'cars';
+include __DIR__ . '/includes/layout_head.php';
+?>
 
-                   <!-- Tab panes -->
-                   <div class="tab-content">
-                     <!-- vehicle-overview -->
-                     <div role="tabpanel" class="tab-pane active" id="vehicle-overview">
-                       <p><?php echo htmlentities($result->VehiclesOverview); ?></p>
-                     </div>
+<section class="bg-slate-950 text-white py-6 border-b border-slate-800">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <div class="text-xs text-slate-400">
+        <a href="index.php" class="hover:text-sky-300">Home</a> /
+        <a href="car-listing.php" class="hover:text-sky-300">Fleet</a> /
+        <span class="text-sky-300"><?php echo Security::e($vehicle->BrandName); ?></span>
+      </div>
+      <h1 class="mt-1 text-2xl font-extrabold sm:text-3xl">
+        <?php echo Security::e($vehicle->BrandName . ' ' . $vehicle->VehiclesTitle); ?>
+      </h1>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-900 px-5 py-3 text-right">
+      <div class="text-2xl font-extrabold text-red-500">₹<?php echo number_format((float) $vehicle->PricePerDay); ?></div>
+      <div class="text-xs font-medium text-slate-400">Per Calendar Day</div>
+    </div>
+  </div>
+</section>
 
-                     <!-- Accessories -->
-                     <div role="tabpanel" class="tab-pane" id="accessories">
-                       <!--Accessories-->
-                       <table>
-                         <thead>
-                           <tr>
-                             <th colspan="2">Accessories</th>
-                           </tr>
-                         </thead>
-                         <tbody>
-                           <tr>
-                             <td>Air Conditioner</td>
-                             <?php if ($result->AirConditioner == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+<section class="py-10 flex-1">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
+      <!-- Left: Gallery, Specs, Accessories -->
+      <div class="lg:col-span-8 space-y-6" x-data="{ activeImg: <?php echo Security::e(json_encode($images[0] ?? '')); ?> }">
+        <!-- Image Gallery -->
+        <div class="card overflow-hidden p-3">
+          <div class="relative aspect-[16/9] overflow-hidden rounded-xl bg-slate-100">
+            <img :src="'admin/img/vehicleimages/' + activeImg" alt="<?php echo Security::e($vehicle->VehiclesTitle); ?>" class="h-full w-full object-cover">
+          </div>
+          <?php if (count($images) > 1): ?>
+            <div class="mt-3 grid grid-cols-5 gap-2">
+              <?php foreach ($images as $img): ?>
+                <button type="button" @click="activeImg = <?php echo Security::e(json_encode($img)); ?>"
+                        :class="activeImg === <?php echo Security::e(json_encode($img)); ?> ? 'ring-2 ring-blue-700 border-blue-700' : 'border-slate-200 opacity-80 hover:opacity-100'"
+                        class="overflow-hidden rounded-lg border bg-slate-100 aspect-[16/10] transition">
+                  <img src="admin/img/vehicleimages/<?php echo Security::e($img); ?>" alt="Thumbnail" class="h-full w-full object-cover">
+                </button>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </div>
 
-                           <tr>
-                             <td>AntiLock Braking System</td>
-                             <?php if ($result->AntiLockBrakingSystem == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+        <!-- Key Specs -->
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div class="card p-4 text-center">
+            <div class="text-xs font-semibold uppercase text-slate-500">Model Year</div>
+            <div class="mt-1 text-lg font-extrabold text-slate-950"><?php echo (int) $vehicle->ModelYear; ?></div>
+          </div>
+          <div class="card p-4 text-center">
+            <div class="text-xs font-semibold uppercase text-slate-500">Fuel Type</div>
+            <div class="mt-1 text-lg font-extrabold text-blue-700"><?php echo Security::e($vehicle->FuelType); ?></div>
+          </div>
+          <div class="card p-4 text-center">
+            <div class="text-xs font-semibold uppercase text-slate-500">Seats</div>
+            <div class="mt-1 text-lg font-extrabold text-slate-950"><?php echo (int) $vehicle->SeatingCapacity; ?> Persons</div>
+          </div>
+          <div class="card p-4 text-center">
+            <div class="text-xs font-semibold uppercase text-slate-500">Transmission</div>
+            <div class="mt-1 text-lg font-extrabold text-slate-950"><?php echo Security::e($vehicle->Transmission ?? 'Manual'); ?></div>
+          </div>
+        </div>
 
-                           <tr>
-                             <td>Power Steering</td>
-                             <?php if ($result->PowerSteering == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+        <!-- Overview & Features -->
+        <div class="card p-6 space-y-6">
+          <div>
+            <h2 class="text-lg font-bold text-slate-950 border-b border-slate-100 pb-2">Vehicle Overview</h2>
+            <p class="mt-3 text-sm text-slate-700 leading-relaxed"><?php echo nl2br(Security::e($vehicle->VehiclesOverview)); ?></p>
+          </div>
 
-                           <tr>
-                             <td>Power Windows</td>
-                             <?php if ($result->PowerWindows == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+          <div>
+            <h2 class="text-lg font-bold text-slate-950 border-b border-slate-100 pb-2">Safety &amp; Comfort Features</h2>
+            <div class="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+              <?php foreach ($accessories as $col => $label):
+                $has = ((int) ($vehicle->$col ?? 0)) === 1;
+              ?>
+                <div class="flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-semibold <?php echo $has ? 'border-sky-200 bg-blue-50/70 text-slate-900' : 'border-slate-200 bg-slate-50 text-slate-400'; ?>">
+                  <span><?php echo Security::e($label); ?></span>
+                  <span class="<?php echo $has ? 'text-blue-700' : 'text-slate-400'; ?>"><?php echo $has ? 'Yes' : 'No'; ?></span>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </div>
+      </div>
 
-                           <tr>
-                             <td>CD Player</td>
-                             <?php if ($result->CDPlayer == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+      <!-- Right: Live Booking & Quote Card -->
+      <aside class="lg:col-span-4">
+        <div class="card p-6 sticky top-24 space-y-5"
+             x-data="bookingWidget(<?php echo (int) $vhid; ?>, <?php echo (float) $vehicle->PricePerDay; ?>, <?php echo (int) $tokenBalance; ?>, <?php echo Security::e(json_encode($prefillFrom)); ?>, <?php echo Security::e(json_encode($prefillTo)); ?>)">
+          <div class="border-b border-slate-100 pb-3">
+            <h2 class="text-lg font-extrabold text-slate-950">Book This Vehicle</h2>
+            <p class="text-xs text-slate-500">Instant availability check &amp; transparent ₹ INR fare breakdown</p>
+          </div>
 
-                           <tr>
-                             <td>Leather Seats</td>
-                             <?php if ($result->LeatherSeats == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+          <?php if (!empty($bookedRanges)): ?>
+            <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900">
+              <div class="font-bold mb-1">Currently Reserved Dates:</div>
+              <ul class="space-y-0.5">
+                <?php foreach ($bookedRanges as $rng): ?>
+                  <li>&bull; <?php echo Security::e($rng['from']); ?> to <?php echo Security::e($rng['to']); ?></li>
+                <?php endforeach; ?>
+              </ul>
+            </div>
+          <?php endif; ?>
 
-                           <tr>
-                             <td>Central Locking</td>
-                             <?php if ($result->CentralLocking == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+          <form method="post" class="space-y-4">
+            <?php echo Csrf::field(); ?>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">Pickup Date</label>
+                <input type="date" name="fromdate" x-model="fromDate" @change="refreshQuote()" min="<?php echo $today; ?>" required class="form-input">
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">Drop-off Date</label>
+                <input type="date" name="todate" x-model="toDate" @change="refreshQuote()" :min="fromDate || '<?php echo $today; ?>'" required class="form-input">
+              </div>
+            </div>
 
-                           <tr>
-                             <td>Power Door Locks</td>
-                             <?php if ($result->PowerDoorLocks == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
-                           <tr>
-                             <td>Brake Assist</td>
-                             <?php if ($result->BrakeAssist == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php  } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+            <div>
+              <label class="mb-1 block text-xs font-semibold text-slate-600">Pickup &amp; Drop-off Hub</label>
+              <select name="pickup_location" class="form-input">
+                <option value="DriveX Hub, GS Road, Guwahati">DriveX Hub, GS Road, Guwahati</option>
+                <option value="Lokpriya Gopinath Bordoloi Airport (GAU)">Guwahati Airport (GAU)</option>
+                <option value="Guwahati Railway Station, Paltan Bazar">Guwahati Railway Station</option>
+              </select>
+              <input type="hidden" name="dropoff_location" value="DriveX Hub, GS Road, Guwahati">
+            </div>
 
-                           <tr>
-                             <td>Driver Airbag</td>
-                             <?php if ($result->DriverAirbag == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+            <div>
+              <label class="mb-1 block text-xs font-semibold text-slate-600">Trip Notes / Requirements</label>
+              <textarea name="message" rows="2" class="form-input" placeholder="Destination, driver preference, pickup time..."></textarea>
+            </div>
 
-                           <tr>
-                             <td>Passenger Airbag</td>
-                             <?php if ($result->PassengerAirbag == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+            <?php if (!empty($_SESSION['login'])): ?>
+              <!-- Loyalty Token Redemption -->
+              <div class="rounded-xl border border-sky-200 bg-blue-50/70 p-3.5 space-y-2">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="font-bold text-blue-900">Loyalty Tokens</span>
+                  <span class="font-extrabold text-blue-700"><?php echo (int) $tokenBalance; ?> available</span>
+                </div>
+                <?php if ($tokenBalance >= PricingService::MIN_REDEEM_TOKENS): ?>
+                  <select name="redeem_tokens" x-model.number="redeemTokens" @change="refreshQuote()" class="form-input bg-white !py-2 !text-xs">
+                    <option value="0">Do not use tokens (Save for later)</option>
+                    <?php
+                    $maxRedeem = (int) floor($tokenBalance / 5) * 5;
+                    for ($t = 15; $t <= $maxRedeem; $t += 5):
+                        $disc = ($t / 5) * 100;
+                    ?>
+                      <option value="<?php echo $t; ?>">Redeem <?php echo $t; ?> tokens (Save ₹<?php echo $disc; ?>)</option>
+                    <?php endfor; ?>
+                  </select>
+                  <button type="button" @click="getAiTip()" class="text-[11px] font-bold text-blue-700 hover:underline">
+                    Optimize tokens &amp; get route advice &rarr;
+                  </button>
+                  <div x-show="aiTip" class="rounded bg-white p-2 text-[11px] text-slate-700 border border-sky-200" x-text="aiTip"></div>
+                <?php else: ?>
+                  <p class="text-[11px] text-slate-600">Minimum 15 tokens needed to redeem (5 tokens = ₹100 off). You earn 5 tokens after every completed trip.</p>
+                <?php endif; ?>
+              </div>
 
-                           <tr>
-                             <td>Crash Sensor</td>
-                             <?php if ($result->CrashSensor == 1) {
-                              ?>
-                               <td><i class="fa fa-check" aria-hidden="true"></i></td>
-                             <?php } else { ?>
-                               <td><i class="fa fa-close" aria-hidden="true"></i></td>
-                             <?php } ?>
-                           </tr>
+              <!-- Live Fare Breakdown -->
+              <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2 text-xs">
+                <div class="flex justify-between">
+                  <span class="text-slate-600">Rental Duration</span>
+                  <span class="font-bold text-slate-900" x-text="quote.days + ' day(s)'">1 day</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-slate-600">Base Fare</span>
+                  <span class="font-semibold text-slate-900" x-text="'₹' + Number(quote.base_amount).toLocaleString('en-IN')">₹0</span>
+                </div>
+                <div class="flex justify-between" x-show="quote.discount_amount > 0">
+                  <span class="text-blue-700 font-semibold">Token Discount</span>
+                  <span class="text-blue-700 font-bold" x-text="'- ₹' + Number(quote.discount_amount).toLocaleString('en-IN')">- ₹0</span>
+                </div>
+                <div class="border-t border-slate-200 pt-2 flex justify-between items-center">
+                  <span class="text-sm font-bold text-slate-950">Total Payable</span>
+                  <span class="text-xl font-extrabold text-red-600" x-text="'₹' + Number(quote.final_amount).toLocaleString('en-IN')">₹0</span>
+                </div>
+                <div x-show="availabilityMsg" class="pt-1 text-[11px] font-bold"
+                     :class="isAvailable ? 'text-blue-700' : 'text-red-600'" x-text="availabilityMsg"></div>
+              </div>
 
-                         </tbody>
-                       </table>
-                     </div>
-                   </div>
-                 </div>
+              <div class="space-y-2">
+                <button type="submit" name="book_submit" value="1" onclick="document.getElementById('booking_mode_input').value='pay_now'"
+                        :disabled="isAvailable === false" class="btn-red w-full !py-3">
+                  Book &amp; Pay Online
+                </button>
+                <button type="submit" name="book_submit" value="1" onclick="document.getElementById('booking_mode_input').value='pay_at_pickup'"
+                        :disabled="isAvailable === false" class="btn-outline w-full">
+                  Reserve Now (Pay at Pickup)
+                </button>
+                <input type="hidden" name="booking_mode" id="booking_mode_input" value="pay_now">
+              </div>
+            <?php else: ?>
+              <button type="button" onclick="window.openAuthModal('login')" class="btn-primary w-full !py-3">
+                Sign In to Book This Vehicle
+              </button>
+            <?php endif; ?>
+          </form>
+        </div>
+      </aside>
+    </div>
 
-               </div>
-           <?php }
-        } ?>
+    <!-- Similar Cars -->
+    <?php if (!empty($similarCars)): ?>
+      <div class="mt-14 border-t border-slate-200 pt-10">
+        <h2 class="text-xl font-extrabold text-slate-950 mb-6">Similar Available Vehicles</h2>
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <?php foreach ($similarCars as $sim): ?>
+            <a href="vehical-details.php?vhid=<?php echo (int) $sim->id; ?>" class="card overflow-hidden hover:border-blue-600 transition">
+              <img src="admin/img/vehicleimages/<?php echo Security::e($sim->Vimage1); ?>" alt="<?php echo Security::e($sim->VehiclesTitle); ?>" class="h-40 w-full object-cover">
+              <div class="p-4">
+                <div class="text-xs font-bold text-blue-700"><?php echo Security::e($sim->BrandName); ?></div>
+                <div class="font-bold text-slate-950 truncate"><?php echo Security::e($sim->VehiclesTitle); ?></div>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                  <span class="text-slate-600"><?php echo (int) $sim->SeatingCapacity; ?> Seats &bull; <?php echo Security::e($sim->FuelType); ?></span>
+                  <span class="font-extrabold text-red-600">₹<?php echo number_format((float) $sim->PricePerDay); ?>/d</span>
+                </div>
+              </div>
+            </a>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    <?php endif; ?>
+  </div>
+</section>
 
-             </div>
+<script>
+function bookingWidget(vehicleId, dailyRate, tokenBalance, preFrom, preTo) {
+  return {
+    fromDate: preFrom,
+    toDate: preTo,
+    redeemTokens: 0,
+    isAvailable: true,
+    availabilityMsg: '',
+    aiTip: '',
+    quote: { days: 1, base_amount: dailyRate, discount_amount: 0, final_amount: dailyRate },
+    init() {
+      this.refreshQuote();
+    },
+    async refreshQuote() {
+      if (!this.fromDate || !this.toDate) return;
+      try {
+        var params = new URLSearchParams({
+          vehicle_id: vehicleId,
+          from_date: this.fromDate,
+          to_date: this.toDate,
+          redeem_tokens: this.redeemTokens || 0
+        });
+        var res = await fetch('api/v1/availability.php?' + params.toString());
+        var data = await res.json();
+        if (data.error) {
+          this.isAvailable = false;
+          this.availabilityMsg = data.error;
+          return;
+        }
+        if (data.quote) {
+          this.quote = data.quote;
+        }
+        this.isAvailable = Boolean(data.available);
+        this.availabilityMsg = this.isAvailable
+          ? 'Vehicle is available for selected dates.'
+          : 'Selected dates overlap an existing booking.';
+      } catch (e) {}
+    },
+    async getAiTip() {
+      var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      try {
+        var res = await fetch('api/v1/ai.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({
+            action: 'optimize_booking',
+            vehicle_id: vehicleId,
+            days: this.quote.days,
+            token_balance: tokenBalance
+          })
+        });
+        var data = await res.json();
+        if (data.success) {
+          this.aiTip = data.advice || '';
+        }
+      } catch (e) {}
+    }
+  };
+}
+</script>
 
-             <!--Side-Bar-->
-             <aside class="col-md-3">
-               <div class="share_vehicle">
-                 <p>Share: <a href="https://www.facebook.com/p/Drivex-61575801312906/">
-                     <i class="fa fa-facebook-square" aria-hidden="true"></i>
-                   </a>
-                   <a href="https://www.instagram.com/drivex_assam/?locale=en-GB&hl=ar">
-                     <i class="fa fa-instagram" aria-hidden="true"></i>
-                   </a>
-                 </p>
-               </div>
-               <div class="sidebar_widget">
-                 <div class="widget_heading">
-                   <h5><i class="fa fa-envelope" aria-hidden="true"></i>Book Now</h5>
-                 </div>
-                 <form method="post">
-                   <div class="form-group">
-                     <label>From Date:</label>
-                     <input type="date" class="form-control" name="fromdate" id="fromdate" placeholder="From Date" min="<?php echo date('Y-m-d'); ?>" required>
-                   </div>
-                   <div class="form-group">
-                     <label>To Date:</label>
-                     <input type="date" class="form-control" name="todate" id="todate" placeholder="To Date" min="<?php echo date('Y-m-d'); ?>" required>
-                   </div>
-                   <div class="form-group">
-                     <textarea rows="4" class="form-control" name="message" placeholder="Message" required></textarea>
-                   </div>
-                   <?php if ($_SESSION['login']) { ?>
-                     <div class="form-group">
-                       <input type="submit" class="btn" name="submit" value="Book Now">
-                     </div>
-                     <div class="form-group">
-                       <a href="booking-with-payment.php?vhid=<?php echo $_GET['vhid']; ?>" class="btn btn-success btn-block">
-                         <i class="fa fa-credit-card"></i> Book with Payment
-                       </a>
-                     </div>
-                   <?php } else { ?>
-                     <a href="#loginform" class="btn btn-xs uppercase" data-toggle="modal" data-dismiss="modal">Login For Book</a>
-                   <?php } ?>
-                   <div class="form-group">
-                     <?php if (strlen($_SESSION['login']) == 0) { ?>
-                       <a href="#loginform" class="btn btn-xs uppercase" data-toggle="modal" data-dismiss="modal"></a>
-                     <?php } else { ?>
-                       <!-- Token Redemption Section -->
-                       <div class="token-redemption-section p-3 mb-4 bg-light rounded">
-                         <?php
-                          // Get user's token balance
-                          $sql = "SELECT tokenBalance FROM tblcustomertokens WHERE userEmail = :email";
-                          $query = $dbh->prepare($sql);
-                          $query->bindParam(':email', $_SESSION['login'], PDO::PARAM_STR);
-                          $query->execute();
-                          $tokenBalance = $query->fetchColumn();
-                          if (!$tokenBalance) $tokenBalance = 0;
-                          ?>
-
-                         <h4 class="text-primary mb-3">Use Your Tokens for Discount!</h4>
-                         <div class="token-info mb-3">
-                           <div class="row">
-                             <div class="col-md-6">
-                               <div class="current-balance">
-                                 <h5>Your Token Balance</h5>
-                                 <h3 class="text-success"><?php echo $tokenBalance; ?> tokens</h3>
-                               </div>
-                             </div>
-                             <div class="col-md-6">
-                               <div class="redemption-rules">
-                                 <ul class="list-unstyled">
-                                   <li><i class="fa fa-check text-success"></i> 5 tokens = ₹100 discount</li>
-                                   <li><i class="fa fa-check text-success"></i> Minimum 15 tokens needed</li>
-                                   <li><i class="fa fa-check text-success"></i> Redeem in multiples of 5</li>
-                                 </ul>
-                               </div>
-                             </div>
-                           </div>
-                         </div>
-
-                         <?php if ($tokenBalance >= 15) { ?>
-                           <div class="redemption-options">
-                             <label for="redeem_tokens"><strong>Select Tokens to Redeem:</strong></label>
-                             <select name="redeem_tokens" id="redeem_tokens" class="form-control" onchange="updateDiscountDisplay()">
-                               <option value="0">Select Tokens Here</option>
-                               <?php
-                                // Show redemption options in multiples of 5, up to user's balance
-                                for ($i = 15; $i <= $tokenBalance && $i <= 50; $i += 5) {
-                                  $discount = ($i / 5) * 100;
-                                  echo "<option value=\"$i\">Redeem $i tokens for ₹$discount discount</option>";
-                                }
-                                ?>
-                             </select>
-                             <div id="selected-discount" class="mt-2 text-success" style="display: none;">
-                               <strong>Selected Discount: ₹<span id="discount-amount">0</span></strong>
-                             </div>
-                           </div>
-                         <?php } else { ?>
-                           <div class="alert alert-info">
-                             <i class="fa fa-info-circle"></i> You need at least 15 tokens to get a discount.
-                             Complete more bookings to earn tokens!
-                           </div>
-                         <?php } ?>
-                       </div>
-                       <!-- End Token Redemption Section -->
-                     <?php } ?>
-                   </div>
-                 </form>
-               </div>
-             </aside>
-             <!--/Side-Bar-->
-           </div>
-
-           <div class="space-20"></div>
-           <div class="divider"></div>
-
-           <!--Similar-Cars-->
-           <div class="similar_cars">
-             <h3>Similar Cars</h3>
-             <div class="row">
-               <?php
-                $bid = $_SESSION['brndid'];
-                $sql = "SELECT tblvehicles.VehiclesTitle,tblbrands.BrandName,tblvehicles.PricePerDay,tblvehicles.FuelType,tblvehicles.ModelYear,tblvehicles.id,tblvehicles.SeatingCapacity,tblvehicles.VehiclesOverview,tblvehicles.Vimage1 from tblvehicles join tblbrands on tblbrands.id=tblvehicles.VehiclesBrand where tblvehicles.VehiclesBrand=:bid";
-                $query = $dbh->prepare($sql);
-                $query->bindParam(':bid', $bid, PDO::PARAM_STR);
-                $query->execute();
-                $results = $query->fetchAll(PDO::FETCH_OBJ);
-                $cnt = 1;
-                if ($query->rowCount() > 0) {
-                  foreach ($results as $result) { ?>
-                   <div class="col-md-3 grid_listing">
-                     <div class="product-listing-m gray-bg">
-                       <div class="product-listing-img"> <a href="vehical-details.php?vhid=<?php echo htmlentities($result->id); ?>"><img src="admin/img/vehicleimages/<?php echo htmlentities($result->Vimage1); ?>" class="img-responsive" alt="image" /> </a>
-                       </div>
-                       <div class="product-listing-content">
-                         <h5><a href="vehical-details.php?vhid=<?php echo htmlentities($result->id); ?>"><?php echo htmlentities($result->BrandName); ?> , <?php echo htmlentities($result->VehiclesTitle); ?></a></h5>
-                         <p class="list-price">₹<?php echo htmlentities($result->PricePerDay); ?></p>
-                         <ul class="features_list">
-                           <li><i class="fa fa-user" aria-hidden="true"></i><?php echo htmlentities($result->SeatingCapacity); ?> seats</li>
-                           <li><i class="fa fa-calendar" aria-hidden="true"></i><?php echo htmlentities($result->ModelYear); ?> model</li>
-                           <li><i class="fa fa-car" aria-hidden="true"></i><?php echo htmlentities($result->FuelType); ?></li>
-                         </ul>
-                       </div>
-                     </div>
-                   </div>
-               <?php }
-                } ?>
-             </div>
-           </div>
-           <!--/Similar-Cars-->
-
-         </div>
-       </section>
-       <!--/Listing-detail-->
-
-       <!--Footer -->
-       <?php include('includes/footer.php'); ?>
-       <!-- /Footer-->
-
-       <!--Back to top-->
-       <div id="back-top" class="back-top"> <a href="#top"><i class="fa fa-angle-up" aria-hidden="true"></i> </a> </div>
-       <!--/Back to top-->
-
-       <!--Login-Form -->
-       <?php include('includes/login.php'); ?>
-       <!--/Login-Form -->
-
-       <!--Register-Form -->
-       <?php include('includes/registration.php'); ?>
-
-       <!--/Register-Form -->
-
-       <!--Forgot-password-Form -->
-       <?php include('includes/forgotpassword.php'); ?>
-
-       <script src="assets/js/jquery.min.js"></script>
-       <script src="assets/js/bootstrap.min.js"></script>
-       <script src="assets/js/interface.js"></script>
-       <script src="assets/switcher/js/switcher.js"></script>
-       <script src="assets/js/bootstrap-slider.min.js"></script>
-       <script src="assets/js/slick.min.js"></script>
-       <script src="assets/js/owl.carousel.min.js"></script>
-
-       <script>
-         // Date validation
-         document.getElementById('fromdate').addEventListener('change', function() {
-           document.getElementById('todate').min = this.value;
-         });
-
-         document.getElementById('todate').addEventListener('change', function() {
-           if (this.value < document.getElementById('fromdate').value) {
-             alert('To Date cannot be before From Date');
-             this.value = document.getElementById('fromdate').value;
-           }
-         });
-
-         function updateDiscountDisplay() {
-           var tokens = document.getElementById('redeem_tokens').value;
-           var discountDiv = document.getElementById('selected-discount');
-           var discountAmount = document.getElementById('discount-amount');
-
-           if (tokens > 0) {
-             var discount = (tokens / 5) * 100;
-             discountAmount.textContent = discount;
-             discountDiv.style.display = 'block';
-           } else {
-             discountDiv.style.display = 'none';
-           }
-         }
-       </script>
-
- </body>
-
- </html>
+<?php include __DIR__ . '/includes/footer.php'; ?>

@@ -1,165 +1,62 @@
 <?php
-session_start();
-error_reporting(0);
-include('includes/config.php');
-if(strlen($_SESSION['alogin'])==0)
-	{	
-header('location:index.php');
-}
-else{
-if(isset($_GET['del']))
-{
-$id=$_GET['del'];
-$sql = "delete from  tblsubscribers  WHERE id=:id";
-$query = $dbh->prepare($sql);
-$query -> bindParam(':id',$id, PDO::PARAM_STR);
-$query -> execute();
-$msg="Subscriber info deleted";
 
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/config.php';
+
+use App\Core\Csrf;
+use App\Core\Security;
+use App\Core\Session;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['del_sub_id'])) {
+    Csrf::requireValid();
+    $sid = (int) $_POST['del_sub_id'];
+    $dbh->prepare('DELETE FROM tblsubscribers WHERE id = :id')->execute([':id' => $sid]);
+    Session::setFlash('success', 'Subscriber removed.');
+    Security::redirect('manage-subscribers.php');
 }
 
+$subs = $dbh->query('SELECT * FROM tblsubscribers ORDER BY id DESC')->fetchAll();
 
- ?>
+$adminTitle = 'Manage Subscribers';
+$adminNav = 'subscribers';
+include __DIR__ . '/includes/layout_head.php';
+?>
 
-<!doctype html>
-<html lang="en" class="no-js">
+<div class="space-y-5">
+  <h1 class="text-2xl font-extrabold text-slate-950">Newsletter Subscribers</h1>
+  <div class="card overflow-hidden">
+    <table class="w-full text-left text-xs">
+      <thead class="bg-slate-50 text-slate-600 uppercase border-b border-slate-200">
+        <tr>
+          <th class="px-4 py-3">#</th>
+          <th class="px-4 py-3">Email</th>
+          <th class="px-4 py-3">Subscribed Date</th>
+          <th class="px-4 py-3">Action</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <?php if (empty($subs)): ?>
+          <tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">No subscribers yet.</td></tr>
+        <?php else: ?>
+          <?php foreach ($subs as $idx => $s): ?>
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-3 text-slate-500"><?php echo $idx + 1; ?></td>
+              <td class="px-4 py-3 font-bold text-slate-900"><?php echo Security::e($s->SubscriberEmail); ?></td>
+              <td class="px-4 py-3 text-slate-600"><?php echo Security::e($s->PostingDate); ?></td>
+              <td class="px-4 py-3">
+                <form method="post" onsubmit="return confirm('Remove this subscriber?');">
+                  <?php echo Csrf::field(); ?>
+                  <input type="hidden" name="del_sub_id" value="<?php echo (int) $s->id; ?>">
+                  <button type="submit" class="btn-red !py-1 !px-2.5 !text-[11px]">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
 
-<head>
-	<meta charset="UTF-8">
-	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1">
-	<meta name="description" content="">
-	<meta name="author" content="">
-	<meta name="theme-color" content="#3e454c">
-	
-	<title>Car Rental Portal |Admin Manage Subscribers   </title>
-
-	<!-- Font awesome -->
-	<link rel="stylesheet" href="css/font-awesome.min.css">
-	<!-- Sandstone Bootstrap CSS -->
-	<link rel="stylesheet" href="css/bootstrap.min.css">
-	<!-- Bootstrap Datatables -->
-	<link rel="stylesheet" href="css/dataTables.bootstrap.min.css">
-	<!-- Bootstrap social button library -->
-	<link rel="stylesheet" href="css/bootstrap-social.css">
-	<!-- Bootstrap select -->
-	<link rel="stylesheet" href="css/bootstrap-select.css">
-	<!-- Bootstrap file input -->
-	<link rel="stylesheet" href="css/fileinput.min.css">
-	<!-- Awesome Bootstrap checkbox -->
-	<link rel="stylesheet" href="css/awesome-bootstrap-checkbox.css">
-	<!-- Admin Stye -->
-	<link rel="stylesheet" href="css/style.css">
-  <style>
-		.errorWrap {
-    padding: 10px;
-    margin: 0 0 20px 0;
-    background: #fff;
-    border-left: 4px solid #dd3d36;
-    -webkit-box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
-    box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
-}
-.succWrap{
-    padding: 10px;
-    margin: 0 0 20px 0;
-    background: #fff;
-    border-left: 4px solid #5cb85c;
-    -webkit-box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
-    box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
-}
-		</style>
-
-</head>
-
-<body>
-	<?php include('includes/header.php');?>
-
-	<div class="ts-main-content">
-		<?php include('includes/leftbar.php');?>
-		<div class="content-wrapper">
-			<div class="container-fluid">
-
-				<div class="row">
-					<div class="col-md-12">
-
-						<h2 class="page-title">Manage Subscribers</h2>
-
-						<!-- Zero Configuration Table -->
-						<div class="panel panel-default">
-							<div class="panel-heading">Subscribers Details</div>
-							<div class="panel-body">
-							<?php if($error){?><div class="errorWrap"><strong>ERROR</strong>:<?php echo htmlentities($error); ?> </div><?php } 
-				else if($msg){?><div class="succWrap"><strong>SUCCESS</strong>:<?php echo htmlentities($msg); ?> </div><?php }?>
-								<table id="zctb" class="display table table-striped table-bordered table-hover" cellspacing="0" width="100%">
-									<thead>
-										<tr>
-										<th>#</th>
-												<th>Email Id</th>
-											<th>Subscription Date</th>
-											<th>Action</th>
-										</tr>
-									</thead>
-									<tfoot>
-										<tr>
-										<th>#</th>
-										<th>Email Id</th>
-										<th>Subscription Date</th>
-											<th>Action</th>
-										</tr>
-									</tfoot>
-									<tbody>
-
-									<?php $sql = "SELECT * from tblsubscribers";
-$query = $dbh -> prepare($sql);
-$query->execute();
-$results=$query->fetchAll(PDO::FETCH_OBJ);
-$cnt=1;
-if($query->rowCount() > 0)
-{
-foreach($results as $result)
-{				?>	
-										<tr>
-											<td><?php echo htmlentities($cnt);?></td>
-											<td><?php echo htmlentities($result->SubscriberEmail);?></td>
-									
-											<td><?php echo htmlentities($result->PostingDate);?></td>
-
-										<td>
-
-
-<a href="manage-subscribers.php?del=<?php echo $result->id;?>" onclick="return confirm('Do you want to delete');"><i class="fa fa-close"></i></a>
-</td>
-
-										</tr>
-										<?php $cnt=$cnt+1; }} ?>
-										
-									</tbody>
-								</table>
-
-						
-
-							</div>
-						</div>
-
-					
-
-					</div>
-				</div>
-
-			</div>
-		</div>
-	</div>
-
-	<!-- Loading Scripts -->
-	<script src="js/jquery.min.js"></script>
-	<script src="js/bootstrap-select.min.js"></script>
-	<script src="js/bootstrap.min.js"></script>
-	<script src="js/jquery.dataTables.min.js"></script>
-	<script src="js/dataTables.bootstrap.min.js"></script>
-	<script src="js/Chart.min.js"></script>
-	<script src="js/fileinput.js"></script>
-	<script src="js/chartData.js"></script>
-	<script src="js/main.js"></script>
-</body>
-</html>
-<?php } ?>
+<?php include __DIR__ . '/includes/layout_foot.php'; ?>

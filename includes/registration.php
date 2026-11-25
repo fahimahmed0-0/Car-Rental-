@@ -1,111 +1,65 @@
 <?php
-if (isset($_POST['signup'])) {
-  $fname = $_POST['fullname'];
-  $email = $_POST['emailid'];
-  $mobile = $_POST['mobileno'];
-  $password = md5($_POST['password']);
-  $sql = "INSERT INTO tblusers(FullName,EmailId,ContactNo,Password) VALUES(:fname,:email,:mobile,:password)";
-  $query = $dbh->prepare($sql);
-  $query->bindParam(':fname', $fname, PDO::PARAM_STR);
-  $query->bindParam(':email', $email, PDO::PARAM_STR);
-  $query->bindParam(':mobile', $mobile, PDO::PARAM_STR);
-  $query->bindParam(':password', $password, PDO::PARAM_STR);
-  $query->execute();
-  $lastInsertId = $dbh->lastInsertId();
-  if ($lastInsertId) {
-    echo "<script>alert('Registration successful. Now you can login');</script>";
-  } else {
-    echo "<script>alert('Something went wrong. Please try again');</script>";
-  }
-}
+
+declare(strict_types=1);
+
+use App\Core\Csrf;
 ?>
+<div id="signupform" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true">
+  <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+      <div>
+        <h3 class="text-lg font-bold text-slate-950">Create DriveX Account</h3>
+        <p class="text-xs text-slate-500">Earn 5 loyalty tokens on every completed trip</p>
+      </div>
+      <button type="button" onclick="window.closeAuthModals()" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">&times;</button>
+    </div>
+
+    <form method="post" class="space-y-3.5" onsubmit="return this.password.value.length >= 8 || (alert('Password must be at least 8 characters.'), false)">
+      <?php echo Csrf::field(); ?>
+      <div>
+        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Full Name</label>
+        <input type="text" name="fullname" required class="form-input" placeholder="Your full name">
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Mobile Number</label>
+        <input type="text" name="mobileno" maxlength="10" pattern="[0-9]{10}" required class="form-input" placeholder="10-digit mobile number">
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Email Address</label>
+        <input type="email" name="emailid" id="signup_emailid" required class="form-input" placeholder="you@example.com" onblur="window.checkSignupEmail(this.value)">
+        <span id="signup-email-status" class="mt-1 block text-xs"></span>
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Password (min 8 characters)</label>
+        <input type="password" name="password" minlength="8" required class="form-input" placeholder="At least 8 characters">
+      </div>
+      <label class="flex items-start gap-2 text-xs text-slate-600">
+        <input type="checkbox" required checked class="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-600">
+        <span>I agree to the <a href="page.php?type=terms" class="font-semibold text-blue-700 hover:underline">Terms &amp; Conditions</a> and <a href="page.php?type=privacy" class="font-semibold text-blue-700 hover:underline">Privacy Policy</a>.</span>
+      </label>
+      <button type="submit" name="auth_signup" id="signup_submit_btn" class="btn-red w-full">Create Account</button>
+    </form>
+
+    <div class="mt-5 border-t border-slate-100 pt-4 text-center text-xs text-slate-600">
+      Already have an account?
+      <button type="button" onclick="window.openAuthModal('login')" class="font-bold text-blue-700 hover:underline">Sign In</button>
+    </div>
+  </div>
+</div>
 
 <script>
-function checkAvailability() {
-  $("#loaderIcon").show();
-  jQuery.ajax({
-    url: "check_availability.php",
-    data: 'emailid=' + $("#emailid").val(),
-    type: "POST",
-    success: function(data) {
-      $("#user-availability-status").html(data);
-      $("#loaderIcon").hide();
-    },
-    error: function() {}
-  });
-}
+window.checkSignupEmail = async function(email) {
+  var statusEl = document.getElementById('signup-email-status');
+  var btn = document.getElementById('signup_submit_btn');
+  if (!email || !statusEl) return;
+  try {
+    var res = await fetch('check_availability.php?format=json&emailid=' + encodeURIComponent(email), {
+      headers: { 'Accept': 'application/json' }
+    });
+    var data = await res.json();
+    statusEl.textContent = data.message || '';
+    statusEl.className = 'mt-1 block text-xs font-semibold ' + (data.available ? 'text-blue-700' : 'text-red-600');
+    if (btn) btn.disabled = !data.available;
+  } catch (e) {}
+};
 </script>
-
-<!-- Signup Modal -->
-<div class="modal fade" id="signupform" tabindex="-1" role="dialog" aria-labelledby="signupformLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-md" role="document">
-    <div class="modal-content p-3">
-
-      <div class="modal-header">
-        <h5 class="modal-title">Sign Up</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span>&times;</span>
-        </button>
-      </div>
-
-      <div class="modal-body">
-        <form method="post" name="signup">
-          <div class="form-group">
-            <input type="text" class="form-control" name="fullname" placeholder="Full Name" required>
-          </div>
-          <div class="form-group">
-            <input type="text" class="form-control" name="mobileno" placeholder="Mobile Number" maxlength="10" required>
-          </div>
-          <div class="form-group">
-            <input type="email" class="form-control" name="emailid" id="emailid" onBlur="checkAvailability()" placeholder="Email Address" required>
-            <span id="user-availability-status" style="font-size:12px;"></span>
-          </div>
-          <div class="form-group">
-            <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
-          </div>
-          <div class="form-group form-check">
-            <input type="checkbox" class="form-check-input" id="terms_agree" required checked>
-            <label class="form-check-label" for="terms_agree">
-              I agree with <a href="#" data-toggle="modal" data-target="#termsModal">Terms and Conditions</a>
-            </label>
-          </div>
-          <div class="form-group">
-            <button type="submit" name="signup" class="btn btn-primary btn-block">Sign Up</button>
-          </div>
-        </form>
-      </div>
-
-      <div class="modal-footer text-center d-block">
-        <p class="mb-0">Already have an account? <a href="#loginform" data-toggle="modal" data-dismiss="modal">Login Here</a></p>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-<!-- Terms and Conditions Modal -->
-<div class="modal fade" id="termsModal" tabindex="-1" role="dialog" aria-labelledby="termsModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
-    <div class="modal-content">
-
-      <div class="modal-header">
-        <h5 class="modal-title" id="termsModalLabel">Terms and Conditions</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span>&times;</span>
-        </button>
-      </div>
-
-      <div class="modal-body" style="max-height: 400px; overflow-y: auto;">
-        <p>By creating an account, you agree to our terms and conditions including responsible usage, data privacy, and adherence to applicable laws.</p>
-        <p>Your personal data will be handled securely in accordance with our privacy policy. You may not use the service for illegal or harmful purposes.</p>
-        <p>Any violation of these terms may result in termination of your account.</p>
-        <!-- <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin sed arcu vel neque cursus feugiat. Curabitur vitae nisl eget sapien accumsan dignissim.</p> -->
-      </div>
-
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-dismiss="modal">I Agree</button>
-      </div>
-
-    </div>
-  </div>
-</div>

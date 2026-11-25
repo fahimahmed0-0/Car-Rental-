@@ -1,75 +1,65 @@
-# Car Rental System
+# DriveX Assam — Car Rental System (v2.0)
 
-## Project Overview
-This is a car rental management system built with PHP that allows users to browse, book, and manage car rentals. The system includes both user and admin interfaces with features like vehicle management, booking management, and user management.
+Modernized PHP 8.2 + MariaDB car rental platform featuring a clean **White / Blue / Black / Red / Light Blue** interface, transactional booking concurrency locks, an immutable loyalty token ledger, Razorpay + built-in Sandbox checkout, and a **3-Tier Resilient AI Engine** with deterministic offline fallbacks.
 
-## Security Setup for GitHub
+---
 
-This repository has been prepared for public sharing on GitHub by removing sensitive information. Follow these steps to set up the project securely:
+## Architecture Highlights
 
-### Environment Variables
+* **Clean Layered Backend (`src/`):**
+  * `src/Core/`: Zero-dependency `.env` loader (`Env`), PDO connector (`Database`), CSRF manager (`Csrf`), secure session & rate limiter (`Session`, `Security`).
+  * `src/Services/`: `AuthService` (Argon2/bcrypt + transparent MD5 auto-upgrade + 6-digit OTP resets), `BookingService` (`FOR UPDATE` row locks + auto-expiring 10-min checkout locks), `PricingService`, `TokenLedgerService` (immutable `tbltokenledger`), `PaymentService` (Razorpay + Sandbox QR/simulator), `MailService` (PHPMailer SMTP + `tblmailoutbox` fallback), `UploadService`.
+  * `src/Services/AI/`: `AiOrchestrator` (**Tier 1 Cloud LLM** Gemini/OpenAI with circuit breaker → **Tier 2 Local Ollama** → **Tier 3 `DeterministicAiFallback`** PHP/SQL engine).
+* **JSON REST API (`api/v1/`):** `vehicles.php`, `availability.php`, `bookings.php`, `payments.php`, `admin-analytics.php`, `ai.php`.
+* **UI (`assets/css/drivex.css`):** Precompiled Tailwind CSS + Alpine.js + Chart.js v4.
 
-1. Create a `.env` file in the project root based on the provided `.env.example` template:
-   ```
+---
+
+## Quick Setup (XAMPP / Apache / MariaDB)
+
+1. **Create `.env` from template:**
+   ```bash
    cp .env.example .env
    ```
+   Configure `DB_HOST`, `DB_USER`, `DB_PASS`, `DB_NAME`. All other keys (`SMTP_*`, `RAZORPAY_*`, `AI_API_KEY`) are optional—built-in fallbacks handle local/offline mode automatically.
 
-2. Update the `.env` file with your actual database credentials and email settings.
-
-### Database Setup
-
-1. Create a new database for the application.
-2. Import the database structure from `database/carrental.template.sql`:
-   ```
-   mysql -u your_username -p your_database_name < database/carrental.template.sql
-   ```
-3. Update the admin password in the database with a secure hashed password.
-4. Add the payment tables from the command line (this script cannot run from a browser):
-   ```
-   php database/update_database.php
+2. **Import database schema:**
+   ```bash
+   mysql -u root -p carrental < database/carrental.template.sql
    ```
 
-### Email Configuration
+3. **Run idempotent migrations & seed script (CLI only):**
+   ```bash
+   php database/migrate.php
+   php database/seed.php
+   ```
+   *(If upgrading an older database, `migrate.php` safely adds missing tables/columns and migrates legacy token balances into `tbltokenledger`.)*
 
-The application uses PHPMailer for sending emails. Configure your SMTP settings in the `.env` file:
+4. **Rebuild CSS (only needed if editing Tailwind templates):**
+   ```bash
+   npm install
+   npm run build:css
+   ```
 
-```
-SMTP_HOST=your_smtp_server
-SMTP_USER=your_email@example.com
-SMTP_PASS=your_email_password
-SMTP_SECURE=tls
-SMTP_PORT=587
+5. **Run automated tests:**
+   ```bash
+   php tests/run.php
+   ```
 
-EMAIL_FROM=noreply@example.com
-EMAIL_FROM_NAME="Car Rental System"
-EMAIL_TO=admin@example.com
-EMAIL_TO_NAME=Administrator
-```
+---
 
-## Development Setup
+## Fallback Behavior (Zero Single Points of Failure)
 
-1. Clone the repository to your local environment.
-2. Set up your web server (Apache/Nginx) to point to the project directory.
-3. Configure your PHP environment (PHP 7.2+ recommended).
-4. Follow the security setup steps above.
+| Subsystem | Primary Mode | Automatic Fallback |
+| :--- | :--- | :--- |
+| **AI Search, Assistant & Copilot** | Cloud LLM (`AI_PROVIDER=gemini` or `openai`) | Local Ollama (`AI_LOCAL_URL`) → `DeterministicAiFallback` (PHP regex/SQL engine) |
+| **Payments** | Live Razorpay (`PAYMENT_MODE=razorpay`) | Built-in **Sandbox Gateway** (QR + UPI/Card/Wallet/Netbanking simulator) |
+| **Email / OTPs** | PHPMailer SMTP (`SMTP_HOST` configured) | Queued in `tblmailoutbox` (inspectable in Admin → *Mail Outbox*) |
 
-## Production Deployment
+---
 
-For production deployment:
+## Security Notes
 
-1. Ensure all sensitive information is stored in environment variables.
-2. Update the `.env` file with production credentials.
-3. Set appropriate file permissions.
-4. Enable HTTPS for secure communication.
-
-## Security Considerations
-
-- Never commit `.env` files or any files containing sensitive information.
-- Regularly update dependencies and check for security vulnerabilities.
-- Use prepared statements for all database queries to prevent SQL injection.
-- Implement proper input validation and sanitization.
-- Use HTTPS in production environments.
-
-## License
-
-[Add your license information here]
+* Never commit `.env` or `.sql` database dumps (`.gitignore` and `.htaccess` block `src/`, `database/`, `storage/`, `tests/`, and `.env`).
+* All state-changing customer and admin actions require `POST` + CSRF validation.
+* `payment.php` loads `FinalAmount` strictly from the database and verifies booking ownership (`userEmail`).

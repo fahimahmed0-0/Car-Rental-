@@ -1,262 +1,128 @@
 <?php
-session_start();
-error_reporting(0);
-include('includes/config.php');
 
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\SMTP;
-use PHPMailer\PHPMailer\Exception;
+declare(strict_types=1);
 
-if (isset($_POST['send'])) {
-  $name = $_POST['fullname'];
-  $email = $_POST['email'];
-  $contactno = $_POST['contactno'];
-  $message = $_POST['message'];
+require_once __DIR__ . '/includes/config.php';
 
+use App\Core\Csrf;
+use App\Core\Security;
+use App\Core\Session;
+use App\Services\MailService;
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send'])) {
+    Csrf::requireValid();
+    $name = trim((string) ($_POST['fullname'] ?? ''));
+    $email = strtolower(trim((string) ($_POST['email'] ?? '')));
+    $contactno = preg_replace('/\D+/', '', (string) ($_POST['contactno'] ?? '')) ?? '';
+    $message = trim((string) ($_POST['message'] ?? ''));
 
-  //Load Composer's autoloader (created by composer, not included with PHPMailer)
-  require 'PHPMailer/Exception.php';
-  require 'PHPMailer/PHPMailer.php';
-  require 'PHPMailer/SMTP.php';
+    if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || $message === '') {
+        Session::setFlash('error', 'Please fill in all required contact fields accurately.');
+    } else {
+        $ins = $dbh->prepare('INSERT INTO tblcontactusquery (name, EmailId, ContactNumber, Message) VALUES (:name, :email, :phone, :msg)');
+        $ins->execute([
+            ':name' => $name,
+            ':email' => $email,
+            ':phone' => $contactno,
+            ':msg' => $message,
+        ]);
 
-  //Create an instance; passing `true` enables exceptions
-  $mail = new PHPMailer(true);
+        $mailer = new MailService($dbh);
+        $mailer->notifyAdmin(
+            'New Contact Inquiry from ' . $name,
+            '<p><strong>Name:</strong> ' . Security::e($name) . '</p>'
+            . '<p><strong>Email:</strong> ' . Security::e($email) . '</p>'
+            . '<p><strong>Phone:</strong> ' . Security::e($contactno) . '</p>'
+            . '<p><strong>Message:</strong><br>' . nl2br(Security::e($message)) . '</p>',
+            $email
+        );
 
-  try {
-    //Server settings                   //Enable verbose debug output
-    $mail->isSMTP();                                            //Send using SMTP
-    $mail->Host       = getenv('SMTP_HOST') ? getenv('SMTP_HOST') : 'smtp.example.com';  //Set the SMTP server to send through
-    $mail->SMTPAuth   = true;                                   //Enable SMTP authentication
-    $mail->Username   = getenv('SMTP_USER') ? getenv('SMTP_USER') : '';  //SMTP username
-    $mail->Password   = getenv('SMTP_PASS') ? getenv('SMTP_PASS') : '';  //SMTP password
-    $mail->SMTPSecure = getenv('SMTP_SECURE') ? getenv('SMTP_SECURE') : 'tls';  //Enable TLS encryption
-    $mail->Port       = getenv('SMTP_PORT') ? getenv('SMTP_PORT') : 587;  //TCP port to connect to
-
-    // Additional settings to help prevent errors
-    $mail->SMTPOptions = array(
-      'ssl' => array(
-        'verify_peer' => false,
-        'verify_peer_name' => false,
-        'allow_self_signed' => true
-      )
-    );                                    //TCP port to connect to; use 587 if you have set `SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS`
-
-    //Recipients
-    $mail->setFrom(getenv('EMAIL_FROM') ? getenv('EMAIL_FROM') : 'noreply@example.com', getenv('EMAIL_FROM_NAME') ? getenv('EMAIL_FROM_NAME') : 'Contact Form');
-    $mail->addAddress(getenv('EMAIL_TO') ? getenv('EMAIL_TO') : 'contact@example.com', getenv('EMAIL_TO_NAME') ? getenv('EMAIL_TO_NAME') : 'Admin');
-
-    //Content
-    $mail->isHTML(true);                                  //Set email format to HTML
-    $mail->Subject = 'Contact Form';
-    $mail->Body    = "sender name - $name <br> sender email - $email <br>contact no - $contactno <br> message - $message";
-
-    $mail->send();
-    echo ' ';
-  } catch (Exception $e) {
-    echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
-  }
-  $sql = "INSERT INTO tblcontactusquery(name,EmailId,ContactNumber,Message) VALUES(:name,:email,:contactno,:message)";
-  $query = $dbh->prepare($sql);
-  $query->bindParam(':name', $name, PDO::PARAM_STR);
-  $query->bindParam(':email', $email, PDO::PARAM_STR);
-  $query->bindParam(':contactno', $contactno, PDO::PARAM_STR);
-  $query->bindParam(':message', $message, PDO::PARAM_STR);
-  $query->execute();
-  $lastInsertId = $dbh->lastInsertId();
-  if ($lastInsertId) {
-    $msg = "Query Sent. We will contact you shortly";
-  } else {
-    $error = "Something went wrong. Please try again";
-  }
+        Session::setFlash('success', 'Query sent! Our Guwahati support team will get back to you shortly.');
+    }
+    Security::redirect('contact-us.php');
 }
+
+$contactStmt = $dbh->query('SELECT Address, EmailId, ContactNo FROM tblcontactusinfo LIMIT 1');
+$info = $contactStmt ? $contactStmt->fetch() : null;
+
+$pageTitle = 'DriveX Assam | Contact Us';
+$activeNav = 'contact';
+include __DIR__ . '/includes/layout_head.php';
 ?>
-<!DOCTYPE HTML>
-<html lang="en">
 
-<head>
-  <title>Car Rental | Contact Us Page</title>
-  <meta charset="utf-8">
-  <link rel="stylesheet" href="assets/css/bootstrap.min.css">
-  <link rel="stylesheet" href="assets/css/style.css">
-  <link rel="stylesheet" href="assets/css/owl.carousel.css">
-  <link rel="stylesheet" href="assets/css/owl.transitions.css">
-  <link href="assets/css/slick.css" rel="stylesheet">
-  <link href="assets/css/bootstrap-slider.min.css" rel="stylesheet">
-  <link href="assets/css/font-awesome.min.css" rel="stylesheet">
+<section class="bg-slate-950 text-white py-10 border-b-4 border-blue-700">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <p class="text-xs font-bold uppercase tracking-wider text-sky-400">24/7 Customer Support</p>
+    <h1 class="mt-1 text-3xl font-extrabold">Contact DriveX Assam</h1>
+    <p class="mt-1 text-sm text-slate-300">Questions about long-term rentals, airport pickup, or fleet availability? Reach out below.</p>
+  </div>
+</section>
 
-  <!-- SWITCHER -->
-  <link rel="stylesheet" id="switcher-css" type="text/css" href="assets/switcher/css/switcher.css" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/red.css" title="red" media="all" data-default-color="true" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/orange.css" title="orange" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/blue.css" title="blue" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/pink.css" title="pink" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/green.css" title="green" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/purple.css" title="purple" media="all" />
-
-  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="assets/images/favicon-icon/apple-touch-icon-144-precomposed.png">
-  <link rel="shortcut icon" href="assets/images/favicon-icon/favicon.png">
-  <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700,900" rel="stylesheet">
-
-  <style>
-    .errorWrap {
-      padding: 10px;
-      margin: 0 0 20px 0;
-      background: #fff;
-      border-left: 4px solid #dd3d36;
-      box-shadow: 0 1px 1px 0 rgba(0, 0, 0, .1);
-    }
-
-    .succWrap {
-      padding: 10px;
-      margin: 0 0 20px 0;
-      background: #fff;
-      border-left: 4px solid #5cb85c;
-      box-shadow: 0 1px 1px 0 rgba(0, 0, 0, .1);
-    }
-
-    .map-heading {
-      margin: 40px 0 20px;
-      font-size: 24px;
-      font-weight: 600;
-      color: #333;
-      text-align: center;
-    }
-
-    .map-wrapper {
-      position: relative;
-      padding-top: 56.25%;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      overflow: hidden;
-      background-color: #f4f4f4;
-    }
-
-    .map-wrapper iframe {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      border: none;
-      border-radius: 12px;
-    }
-  </style>
-</head>
-
-<body>
-
-  <?php include('includes/colorswitcher.php'); ?>
-  <?php include('includes/header.php'); ?>
-
-  <section class="page-header contactus_page">
-    <div class="container">
-      <div class="page-header_wrap">
-        <div class="page-heading">
-          <h1>Contact Us</h1>
-        </div>
-        <ul class="coustom-breadcrumb">
-          <li><a href="#">Home</a></li>
-          <li>Contact Us</li>
-        </ul>
-      </div>
-    </div>
-    <div class="dark-overlay"></div>
-  </section>
-
-  <section class="contact_us section-padding">
-    <div class="container">
-      <div class="row">
-        <div class="col-md-6">
-          <h3>Get in touch using the form below</h3>
-          <?php if ($error) { ?>
-            <div class="errorWrap"><strong>ERROR</strong>:<?php echo htmlentities($error); ?> </div>
-          <?php } else if ($msg) { ?>
-            <div class="succWrap"><strong>SUCCESS</strong>:<?php echo htmlentities($msg); ?> </div>
-          <?php } ?>
-          <div class="contact_form gray-bg">
-            <form method="post">
-              <div class="form-group">
-                <label class="control-label">Full Name <span>*</span></label>
-                <input type="text" name="fullname" class="form-control white_bg" required>
-              </div>
-              <div class="form-group">
-                <label class="control-label">Email Address <span>*</span></label>
-                <input type="email" name="email" class="form-control white_bg" required>
-              </div>
-              <div class="form-group">
-                <label class="control-label">Phone Number <span>*</span></label>
-                <input type="text" name="contactno" class="form-control white_bg" required maxlength="10" pattern="[0-9]+">
-              </div>
-              <div class="form-group">
-                <label class="control-label">Message <span>*</span></label>
-                <textarea class="form-control white_bg" name="message" rows="4" required></textarea>
-              </div>
-              <div class="form-group">
-                <button class="btn" type="submit" name="send">Send Message <span class="angle_arrow"><i class="fa fa-angle-right" aria-hidden="true"></i></span></button>
-              </div>
-            </form>
-          </div>
-        </div>
-        <div class="col-md-6">
-          <h3>Contact Info</h3>
-          <div class="contact_detail">
-            <?php
-            $sql = "SELECT Address,EmailId,ContactNo FROM tblcontactusinfo";
-            $query = $dbh->prepare($sql);
-            $query->execute();
-            $results = $query->fetchAll(PDO::FETCH_OBJ);
-            if ($query->rowCount() > 0) {
-              foreach ($results as $result) { ?>
-                <ul>
-                  <li>
-                    <div class="icon_wrap"><i class="fa fa-map-marker" aria-hidden="true"></i></div>
-                    <div class="contact_info_m"><?php echo htmlentities($result->Address); ?></div>
-                  </li>
-                  <li>
-                    <div class="icon_wrap"><i class="fa fa-phone" aria-hidden="true"></i></div>
-                    <div class="contact_info_m"><a href="tel:<?php echo htmlentities($result->ContactNo); ?>"><?php echo htmlentities($result->ContactNo); ?></a></div>
-                  </li>
-                  <li>
-                    <div class="icon_wrap"><i class="fa fa-envelope-o" aria-hidden="true"></i></div>
-                    <div class="contact_info_m"><a href="mailto:<?php echo htmlentities($result->EmailId); ?>"><?php echo htmlentities($result->EmailId); ?></a></div>
-                  </li>
-                </ul>
-            <?php }
-            } ?>
-
-            <!-- Google Map - Stylish Embed -->
-            <h3 class="map-heading">Find Us on Map</h3>
-            <div class="map-wrapper">
-              <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3564.5028488546827!2d92.8324141!3d26.6963781!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3744ebbb5c5463f7%3A0x418fff7737cff274!2sDriveX!5e0!3m2!1sen!2sin!4v1748452177173!5m2!1sen!2sin"
-                allowfullscreen=""
-                loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade">
-              </iframe>
+<section class="py-12 flex-1">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
+      <div class="lg:col-span-6">
+        <div class="card p-6 sm:p-8">
+          <h2 class="text-xl font-extrabold text-slate-950 border-b border-slate-100 pb-3 mb-5">Send Us a Message</h2>
+          <form method="post" class="space-y-4">
+            <?php echo Csrf::field(); ?>
+            <div>
+              <label class="mb-1 block text-xs font-semibold uppercase text-slate-600">Full Name *</label>
+              <input type="text" name="fullname" required class="form-input" placeholder="Your full name">
             </div>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label class="mb-1 block text-xs font-semibold uppercase text-slate-600">Email Address *</label>
+                <input type="email" name="email" required class="form-input" placeholder="you@example.com">
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-semibold uppercase text-slate-600">Phone Number *</label>
+                <input type="text" name="contactno" required maxlength="10" pattern="[0-9]{10}" class="form-input" placeholder="10-digit mobile">
+              </div>
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-semibold uppercase text-slate-600">Message *</label>
+              <textarea name="message" rows="4" required class="form-input" placeholder="Tell us about your travel dates, destination, or inquiry..."></textarea>
+            </div>
+            <button type="submit" name="send" class="btn-red w-full sm:w-auto">Send Message</button>
+          </form>
+        </div>
+      </div>
 
+      <div class="lg:col-span-6 space-y-6">
+        <div class="card p-6 space-y-4">
+          <h2 class="text-xl font-extrabold text-slate-950 border-b border-slate-100 pb-3">Office &amp; Support Details</h2>
+          <div class="space-y-3 text-sm">
+            <div class="flex items-start gap-3">
+              <span class="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">Address</span>
+              <span class="text-slate-700"><?php echo Security::e($info->Address ?? 'GS Road, Guwahati, Assam'); ?></span>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">Phone</span>
+              <a href="tel:<?php echo Security::e($info->ContactNo ?? ''); ?>" class="font-semibold text-slate-900 hover:text-blue-700">
+                <?php echo Security::e($info->ContactNo ?? '+91 9876543210'); ?>
+              </a>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">Email</span>
+              <a href="mailto:<?php echo Security::e($info->EmailId ?? ''); ?>" class="font-semibold text-slate-900 hover:text-blue-700">
+                <?php echo Security::e($info->EmailId ?? 'support@drivexassam.com'); ?>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="card overflow-hidden">
+          <div class="border-b border-slate-100 px-5 py-3 text-sm font-bold text-slate-950">Find Us on Map</div>
+          <div class="aspect-[16/10] w-full bg-slate-100">
+            <iframe
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3564.5028488546827!2d92.8324141!3d26.6963781!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3744ebbb5c5463f7%3A0x418fff7737cff274!2sDriveX!5e0!3m2!1sen!2sin!4v1748452177173!5m2!1sen!2sin"
+              class="h-full w-full border-0" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
           </div>
         </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <?php include('includes/footer.php'); ?>
-  <div id="back-top" class="back-top"><a href="#top"><i class="fa fa-angle-up" aria-hidden="true"></i></a></div>
-
-  <?php include('includes/login.php'); ?>
-  <?php include('includes/registration.php'); ?>
-  <?php include('includes/forgotpassword.php'); ?>
-
-  <script src="assets/js/jquery.min.js"></script>
-  <script src="assets/js/bootstrap.min.js"></script>
-  <script src="assets/js/interface.js"></script>
-  <script src="assets/switcher/js/switcher.js"></script>
-  <script src="assets/js/bootstrap-slider.min.js"></script>
-  <script src="assets/js/slick.min.js"></script>
-  <script src="assets/js/owl.carousel.min.js"></script>
-
-</body>
-
-</html>
+<?php include __DIR__ . '/includes/footer.php'; ?>

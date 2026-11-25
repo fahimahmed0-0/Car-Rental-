@@ -1,291 +1,246 @@
 <?php
-session_start();
-include('includes/config.php');
-error_reporting(0);
 
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/config.php';
+
+use App\Core\Security;
+
+$pageTitle = 'DriveX Assam | Premium Self-Drive & Chauffeur Car Rentals';
+$activeNav = 'home';
+
+include __DIR__ . '/includes/layout_head.php';
+
+// Fetch featured vehicles
+$vStmt = $dbh->query(
+    'SELECT v.id, v.VehiclesTitle, v.PricePerDay, v.FuelType, v.ModelYear, v.SeatingCapacity, v.Transmission, v.VehiclesOverview, v.Vimage1, b.BrandName
+     FROM tblvehicles v
+     JOIN tblbrands b ON b.id = v.VehiclesBrand
+     ORDER BY v.id DESC
+     LIMIT 9'
+);
+$featuredCars = $vStmt ? $vStmt->fetchAll() : [];
+
+// Live fleet & customer metrics
+$carCount = (int) $dbh->query('SELECT COUNT(*) FROM tblvehicles')->fetchColumn();
+$brandCount = (int) $dbh->query('SELECT COUNT(*) FROM tblbrands')->fetchColumn();
+$bookingCount = (int) $dbh->query('SELECT COUNT(*) FROM tblbooking')->fetchColumn();
+$userCount = (int) $dbh->query('SELECT COUNT(*) FROM tblusers')->fetchColumn();
+
+// Active testimonials
+$tStmt = $dbh->query(
+    'SELECT t.Testimonial, u.FullName, t.PostingDate
+     FROM tbltestimonial t
+     JOIN tblusers u ON t.UserEmail = u.EmailId
+     WHERE t.status = 1
+     ORDER BY t.id DESC
+     LIMIT 6'
+);
+$testimonials = $tStmt ? $tStmt->fetchAll() : [];
+
+// Brands for quick filter
+$brands = $dbh->query('SELECT id, BrandName FROM tblbrands ORDER BY BrandName ASC')->fetchAll();
+$today = date('Y-m-d');
+$tomorrow = date('Y-m-d', strtotime('+1 day'));
 ?>
 
-<!DOCTYPE HTML>
-<html lang="en">
+<!-- Hero Section (Crisp Black + Blue + White + Red CTA) -->
+<section class="relative bg-slate-950 text-white border-b-4 border-blue-700 overflow-hidden">
+  <div class="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+    <div class="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-center">
+      <div class="lg:col-span-7 space-y-6">
+        <div class="inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-blue-950/80 px-3.5 py-1 text-xs font-semibold text-sky-300">
+          <span class="h-2 w-2 rounded-full bg-red-500"></span>
+          Guwahati &bull; Shillong &bull; Kaziranga &bull; Northeast India
+        </div>
+        <h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-5xl leading-tight">
+          Reliable Cars for Every Journey Across <span class="text-sky-400">Assam</span>
+        </h1>
+        <p class="max-w-2xl text-base text-slate-300 sm:text-lg leading-relaxed">
+          Book inspected hatchbacks, SUVs, and 7-seaters with transparent <strong class="text-white">₹ INR</strong> daily pricing, instant date availability, and loyalty token discounts on every completed trip.
+        </p>
 
-<head>
+        <!-- Smart Search Bar (Supports Dates + Natural Language AI Finder) -->
+        <div class="rounded-2xl border border-slate-800 bg-white p-4 text-slate-900 shadow-lg">
+          <form action="car-listing.php" method="get" class="grid grid-cols-1 gap-3 sm:grid-cols-12">
+            <div class="sm:col-span-5">
+              <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Search or Describe Your Trip</label>
+              <input type="text" name="q" placeholder="e.g. 7-seater diesel SUV under ₹3500" class="form-input">
+            </div>
+            <div class="sm:col-span-3">
+              <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Pickup Date</label>
+              <input type="date" name="from_date" min="<?php echo $today; ?>" value="<?php echo $today; ?>" class="form-input">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Drop-off</label>
+              <input type="date" name="to_date" min="<?php echo $today; ?>" value="<?php echo $tomorrow; ?>" class="form-input">
+            </div>
+            <div class="sm:col-span-2 flex items-end">
+              <button type="submit" class="btn-red w-full !py-2.5">Find Cars</button>
+            </div>
+          </form>
+          <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-xs text-slate-600">
+            <span>Tip: Try natural queries like <em>"5 seater automatic under ₹2500"</em> in the Smart Finder.</span>
+            <a href="car-listing.php?ai=1" class="font-bold text-blue-700 hover:underline">Open Smart Car Finder &rarr;</a>
+          </div>
+        </div>
+      </div>
 
-  <title>Car Rental Portal</title>
-  <!--Bootstrap -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/bootstrap.min.css" type="text/css">
-  <link rel="stylesheet" href="assets/css/style.css" type="text/css">
-  <link rel="stylesheet" href="assets/css/owl.carousel.css" type="text/css">
-  <link rel="stylesheet" href="assets/css/owl.transitions.css" type="text/css">
-  <link href="assets/css/slick.css" rel="stylesheet">
-  <link href="assets/css/bootstrap-slider.min.css" rel="stylesheet">
-  <link href="assets/css/font-awesome.min.css" rel="stylesheet">
-  <link rel="stylesheet" id="switcher-css" type="text/css" href="assets/switcher/css/switcher.css" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/red.css" title="red" media="all" data-default-color="true" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/orange.css" title="orange" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/blue.css" title="blue" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/pink.css" title="pink" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/green.css" title="green" media="all" />
-  <link rel="alternate stylesheet" type="text/css" href="assets/switcher/css/purple.css" title="purple" media="all" />
-  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="assets/images/favicon-icon/apple-touch-icon-144-precomposed.png">
-  <link rel="apple-touch-icon-precomposed" sizes="114x114" href="assets/images/favicon-icon/apple-touch-icon-114-precomposed.html">
-  <link rel="apple-touch-icon-precomposed" sizes="72x72" href="assets/images/favicon-icon/apple-touch-icon-72-precomposed.png">
-  <link rel="apple-touch-icon-precomposed" href="assets/images/favicon-icon/apple-touch-icon-57-precomposed.png">
-  <link rel="shortcut icon" href="assets/images/favicon-icon/favicon.png">
-  <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700,900" rel="stylesheet">
-
-  <!-- Custom Responsive Styles -->
-  <style>
-    .col-list-3 {
-      float: left;
-      padding: 0 15px;
-      margin-bottom: 20px;
-    }
-
-    @media (min-width: 992px) {
-      .col-list-3 {
-        width: 33.33%;
-      }
-    }
-
-    @media (min-width: 768px) and (max-width: 991px) {
-      .col-list-3 {
-        width: 50%;
-      }
-    }
-
-    @media (max-width: 767px) {
-      .col-list-3 {
-        width: 100%;
-      }
-
-      .recent-car-list {
-        margin: 0 auto;
-        max-width: 400px;
-      }
-    }
-
-    .recent-car-list {
-      background: #fff;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      height: 100%;
-      margin: 0;
-    }
-
-    #resentnewcar {
-      display: flex;
-      flex-wrap: wrap;
-      margin: 0 -15px;
-    }
-  </style>
-
-</head>
-
-<body>
-
-  <!-- Start Switcher -->
-  <?php include('includes/colorswitcher.php'); ?>
-  <!-- /Switcher -->
-
-  <!--Header-->
-  <?php include('includes/header.php'); ?>
-  <!-- /Header -->
-
-  <!-- Banners -->
-  <section id="banner" class="banner-section">
-    <div class="container">
-      <div class="div_zindex">
-        <div class="row">
-          <div class="col-md-5 col-md-push-7">
-            <div class="banner_content">
-              <h1>&nbsp;</h1>
-              <p>&nbsp; </p>
+      <!-- Right Side Highlight Card -->
+      <div class="lg:col-span-5">
+        <div class="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-xl">
+          <img src="assets/images/banner-image.jpg" alt="DriveX Assam Fleet" class="h-64 w-full object-cover sm:h-72">
+          <div class="grid grid-cols-3 divide-x divide-slate-800 bg-slate-950 p-4 text-center">
+            <div>
+              <div class="text-xl font-extrabold text-white"><?php echo max($carCount, 6); ?>+</div>
+              <div class="text-[11px] font-medium text-sky-300 uppercase">Verified Cars</div>
+            </div>
+            <div>
+              <div class="text-xl font-extrabold text-white">5 Tokens</div>
+              <div class="text-[11px] font-medium text-slate-300 uppercase">Per Trip Earned</div>
+            </div>
+            <div>
+              <div class="text-xl font-extrabold text-red-500">24&times;7</div>
+              <div class="text-[11px] font-medium text-slate-300 uppercase">Road Support</div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </section>
-  <!-- /Banners -->
+  </div>
+</section>
 
-
-  <!-- Resent Cat-->
-  <section class="section-padding gray-bg">
-    <div class="container">
-      <div class="section-header text-center">
-        <h2>We Find the Best <span>CarForYou</span></h2>
-        <p>"Browse through our collection of premium cars tailored to your needs and budget. Whether you're looking for comfort, speed, or style — we've got it all"</p>
-      </div>
-      <div class="row">
-
-        <!-- Nav tabs -->
-        <div class="recent-tab">
-          <ul class="nav nav-tabs" role="tablist">
-            <li role="presentation" class="active"><a href="#resentnewcar" role="tab" data-toggle="tab">New Car</a></li>
-          </ul>
-        </div>
-        <!-- Recently Listed New Cars -->
-        <div class="tab-content">
-          <div role="tabpanel" class="tab-pane active" id="resentnewcar">
-
-            <?php $sql = "SELECT tblvehicles.VehiclesTitle,tblbrands.BrandName,tblvehicles.PricePerDay,tblvehicles.FuelType,tblvehicles.ModelYear,tblvehicles.id,tblvehicles.SeatingCapacity,tblvehicles.VehiclesOverview,tblvehicles.Vimage1 from tblvehicles join tblbrands on tblbrands.id=tblvehicles.VehiclesBrand limit 9";
-            $query = $dbh->prepare($sql);
-            $query->execute();
-            $results = $query->fetchAll(PDO::FETCH_OBJ);
-            $cnt = 1;
-            if ($query->rowCount() > 0) {
-              foreach ($results as $result) {
-            ?>
-
-                <div class="col-list-3">
-                  <div class="recent-car-list">
-                    <div class="car-info-box"> <a href="vehical-details.php?vhid=<?php echo htmlentities($result->id); ?>"><img src="admin/img/vehicleimages/<?php echo htmlentities($result->Vimage1); ?>" class="img-responsive" alt="image"></a>
-                      <ul>
-                        <li><i class="fa fa-car" aria-hidden="true"></i><?php echo htmlentities($result->FuelType); ?></li>
-                        <li><i class="fa fa-calendar" aria-hidden="true"></i><?php echo htmlentities($result->ModelYear); ?> Model</li>
-                        <li><i class="fa fa-user" aria-hidden="true"></i><?php echo htmlentities($result->SeatingCapacity); ?> seats</li>
-                      </ul>
-                    </div>
-                    <div class="car-title-m">
-                      <h6><a href="vehical-details.php?vhid=<?php echo htmlentities($result->id); ?>"> <?php echo htmlentities($result->VehiclesTitle); ?></a></h6>
-                      <span class="price">₹<?php echo htmlentities($result->PricePerDay); ?> /Day</span>
-                    </div>
-                    <div class="inventory_info_m">
-                      <p><?php echo substr($result->VehiclesOverview, 0, 70); ?></p>
-                    </div>
-                  </div>
-                </div>
-            <?php }
-            } ?>
-
-          </div>
-        </div>
-      </div>
-  </section>
-  <!-- /Resent Cat -->
-
-  <!-- Fun Facts-->
-  <section class="fun-facts-section">
-    <div class="container div_zindex">
-      <div class="row">
-        <div class="col-lg-3 col-xs-6 col-sm-3">
-          <div class="fun-facts-m">
-            <div class="cell">
-              <h2><i class="fa fa-calendar" aria-hidden="true"></i>24x7</h2>
-              <p>In Business</p>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-3 col-xs-6 col-sm-3">
-          <div class="fun-facts-m">
-            <div class="cell">
-              <h2><i class="fa fa-car" aria-hidden="true"></i>100+</h2>
-              <p>Cars</p>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-3 col-xs-6 col-sm-3">
-          <div class="fun-facts-m">
-            <div class="cell">
-              <h2><i class="fa fa-car" aria-hidden="true"></i>Safe</h2>
-              <p>& Easy booking </p>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-3 col-xs-6 col-sm-3">
-          <div class="fun-facts-m">
-            <div class="cell">
-              <h2><i class="fa fa-user-circle-o" aria-hidden="true"></i>600+</h2>
-              <p>Satisfied Customers</p>
-            </div>
-          </div>
-        </div>
-      </div>
+<!-- Quick Brand Filter Strip (Light Blue) -->
+<section class="border-b border-sky-100 bg-blue-50/70 py-5">
+  <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+    <span class="text-xs font-bold uppercase tracking-wider text-blue-900">Browse by Brand:</span>
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="car-listing.php" class="rounded-full border border-blue-700 bg-blue-700 px-3.5 py-1 text-xs font-semibold text-white">All Brands</a>
+      <?php foreach ($brands as $b): ?>
+        <a href="car-listing.php?brand=<?php echo (int) $b->id; ?>"
+           class="rounded-full border border-sky-200 bg-white px-3.5 py-1 text-xs font-semibold text-slate-800 hover:border-blue-600 hover:text-blue-700 transition">
+          <?php echo Security::e($b->BrandName); ?>
+        </a>
+      <?php endforeach; ?>
     </div>
-    <!-- Dark Overlay-->
-    <div class="dark-overlay"></div>
-  </section>
-  <!-- /Fun Facts-->
+  </div>
+</section>
 
-
-  <!--Testimonial -->
-  <section class="section-padding testimonial-section parallex-bg">
-    <div class="container div_zindex">
-      <div class="section-header white-text text-center">
-        <h2>Drive X <span> Assam</span></h2>
+<!-- Featured Fleet -->
+<section class="py-14 bg-white">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div>
+        <span class="inline-block rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">Our Fleet</span>
+        <h2 class="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Featured Vehicles Ready to Drive</h2>
+        <p class="mt-1 text-sm text-slate-600">Clean, well-maintained vehicles with transparent daily pricing and zero hidden charges.</p>
       </div>
-      <div class="row">
-        <div id="testimonial-slider">
-          <?php
-          $tid = 1;
-          $sql = "SELECT tbltestimonial.Testimonial,tblusers.FullName from tbltestimonial join tblusers on tbltestimonial.UserEmail=tblusers.EmailId where tbltestimonial.status=:tid limit 4";
-          $query = $dbh->prepare($sql);
-          $query->bindParam(':tid', $tid, PDO::PARAM_STR);
-          $query->execute();
-          $results = $query->fetchAll(PDO::FETCH_OBJ);
-          $cnt = 1;
-          if ($query->rowCount() > 0) {
-            foreach ($results as $result) {  ?>
+      <a href="car-listing.php" class="btn-outline shrink-0">View All Vehicles &rarr;</a>
+    </div>
 
+    <?php if (empty($featuredCars)): ?>
+      <div class="card p-10 text-center">
+        <p class="text-slate-600">No vehicles are currently listed. Add vehicles from the <a href="admin/index.php" class="font-bold text-blue-700 underline">Admin Portal</a> or run the seed script.</p>
+      </div>
+    <?php else: ?>
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <?php foreach ($featuredCars as $car): ?>
+          <article class="card group overflow-hidden flex flex-col transition hover:border-blue-500 hover:shadow-md">
+            <a href="vehical-details.php?vhid=<?php echo (int) $car->id; ?>" class="relative block h-52 bg-slate-100 overflow-hidden">
+              <img src="admin/img/vehicleimages/<?php echo Security::e($car->Vimage1); ?>"
+                   alt="<?php echo Security::e($car->BrandName . ' ' . $car->VehiclesTitle); ?>"
+                   class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
+              <span class="absolute top-3 left-3 rounded-md bg-slate-950/85 px-2.5 py-1 text-xs font-bold text-white">
+                <?php echo Security::e($car->BrandName); ?>
+              </span>
+              <span class="absolute top-3 right-3 rounded-md bg-blue-700 px-2.5 py-1 text-xs font-bold text-white">
+                <?php echo Security::e($car->FuelType); ?>
+              </span>
+            </a>
 
-              <div class="testimonial-m">
-
-                <div class="testimonial-content">
-                  <div class="testimonial-heading">
-                    <h5><?php echo htmlentities($result->FullName); ?></h5>
-                    <p><?php echo htmlentities($result->Testimonial); ?></p>
-                  </div>
+            <div class="flex flex-1 flex-col p-5">
+              <div class="flex items-start justify-between gap-3">
+                <h3 class="text-lg font-bold text-slate-950 leading-snug">
+                  <a href="vehical-details.php?vhid=<?php echo (int) $car->id; ?>" class="hover:text-blue-700 transition">
+                    <?php echo Security::e($car->VehiclesTitle); ?>
+                  </a>
+                </h3>
+                <div class="text-right shrink-0">
+                  <span class="block text-lg font-extrabold text-red-600">₹<?php echo number_format((float) $car->PricePerDay); ?></span>
+                  <span class="block text-[11px] font-medium text-slate-500">per day</span>
                 </div>
               </div>
-          <?php }
-          } ?>
 
+              <p class="mt-2 line-clamp-2 text-xs text-slate-600 leading-relaxed">
+                <?php echo Security::e(mb_substr((string) $car->VehiclesOverview, 0, 110)); ?>
+              </p>
 
+              <div class="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center text-xs font-semibold text-slate-700">
+                <div class="rounded-md bg-slate-50 py-1.5"><?php echo (int) $car->SeatingCapacity; ?> Seats</div>
+                <div class="rounded-md bg-slate-50 py-1.5"><?php echo (int) $car->ModelYear; ?></div>
+                <div class="rounded-md bg-slate-50 py-1.5"><?php echo Security::e($car->Transmission ?? 'Manual'); ?></div>
+              </div>
 
-        </div>
+              <div class="mt-4 pt-1 flex gap-2">
+                <a href="vehical-details.php?vhid=<?php echo (int) $car->id; ?>" class="btn-primary w-full">View &amp; Book</a>
+              </div>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+</section>
+
+<!-- Why DriveX + Loyalty Program (Light Blue + White) -->
+<section class="border-y border-slate-200 bg-slate-50 py-14">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-4">
+      <div class="card p-6 border-t-4 border-t-blue-700">
+        <div class="text-xs font-bold uppercase tracking-wider text-blue-700">01 &bull; Fleet</div>
+        <h3 class="mt-2 text-base font-bold text-slate-950"><?php echo max($carCount, 1); ?>+ Vehicles &amp; <?php echo max($brandCount, 1); ?> Brands</h3>
+        <p class="mt-1 text-xs text-slate-600 leading-relaxed">Compact hatchbacks to 7-seater SUVs serviced before every handover.</p>
+      </div>
+      <div class="card p-6 border-t-4 border-t-red-600">
+        <div class="text-xs font-bold uppercase tracking-wider text-red-600">02 &bull; Loyalty</div>
+        <h3 class="mt-2 text-base font-bold text-slate-950">Earn &amp; Redeem Tokens</h3>
+        <p class="mt-1 text-xs text-slate-600 leading-relaxed">Earn 5 tokens on every completed trip. Redeem 15+ tokens (5 tokens = ₹100 off).</p>
+      </div>
+      <div class="card p-6 border-t-4 border-t-slate-900">
+        <div class="text-xs font-bold uppercase tracking-wider text-slate-900">03 &bull; Booking</div>
+        <h3 class="mt-2 text-base font-bold text-slate-950">Real-Time Date Locking</h3>
+        <p class="mt-1 text-xs text-slate-600 leading-relaxed">Instant overlap checks and a 10-minute checkout price lock prevent double bookings.</p>
+      </div>
+      <div class="card p-6 border-t-4 border-t-sky-500">
+        <div class="text-xs font-bold uppercase tracking-wider text-sky-700">04 &bull; Support</div>
+        <h3 class="mt-2 text-base font-bold text-slate-950"><?php echo max($bookingCount, 0); ?>+ Trips &bull; <?php echo max($userCount, 0); ?>+ Members</h3>
+        <p class="mt-1 text-xs text-slate-600 leading-relaxed">Local Guwahati support team with instant helpline and transparent cancellation rules.</p>
       </div>
     </div>
-    <!-- Dark Overlay-->
-    <div class="dark-overlay"></div>
-  </section>
-  <!-- /Testimonial-->
+  </div>
+</section>
 
+<!-- Testimonials -->
+<?php if (!empty($testimonials)): ?>
+<section class="py-14 bg-white">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="mb-8 text-center">
+      <span class="inline-block rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">Customer Reviews</span>
+      <h2 class="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">What DriveX Assam Riders Say</h2>
+    </div>
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <?php foreach ($testimonials as $t): ?>
+        <div class="card p-6 flex flex-col justify-between bg-slate-50/70">
+          <p class="text-sm text-slate-700 leading-relaxed">"<?php echo Security::e($t->Testimonial); ?>"</p>
+          <div class="mt-4 border-t border-slate-200 pt-3 flex items-center justify-between">
+            <span class="text-sm font-bold text-slate-950"><?php echo Security::e($t->FullName); ?></span>
+            <span class="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800">Verified Rider</span>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+<?php endif; ?>
 
-  <!--Footer -->
-  <?php include('includes/footer.php'); ?>
-  <!-- /Footer-->
-
-  <!--Back to top-->
-  <div id="back-top" class="back-top"> <a href="#top"><i class="fa fa-angle-up" aria-hidden="true"></i> </a> </div>
-  <!--/Back to top-->
-
-  <!--Login-Form -->
-  <?php include('includes/login.php'); ?>
-  <!--/Login-Form -->
-
-  <!--Register-Form -->
-  <?php include('includes/registration.php'); ?>
-
-  <!--/Register-Form -->
-
-  <!--Forgot-password-Form -->
-  <?php include('includes/forgotpassword.php'); ?>
-  <!--/Forgot-password-Form -->
-
-  <!-- Scripts -->
-  <script src="assets/js/jquery.min.js"></script>
-  <script src="assets/js/bootstrap.min.js"></script>
-  <script src="assets/js/interface.js"></script>
-  <!--Switcher-->
-  <script src="assets/switcher/js/switcher.js"></script>
-  <!--bootstrap-slider-JS-->
-  <script src="assets/js/bootstrap-slider.min.js"></script>
-  <!--Slider-JS-->
-  <script src="assets/js/slick.min.js"></script>
-  <script src="assets/js/owl.carousel.min.js"></script>
-
-</body>
-
-<!-- Mirrored from themes.webmasterdriver.net/carforyou/demo/index.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 16 Jun 2017 07:22:11 GMT -->
-
-</html>
+<?php include __DIR__ . '/includes/footer.php'; ?>

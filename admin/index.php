@@ -1,95 +1,68 @@
 <?php
-session_start();
-include('includes/config.php');
-if(isset($_POST['login']))
-{
-$email=$_POST['username'];
-$password=md5($_POST['password']);
-$sql ="SELECT UserName,Password FROM admin WHERE UserName=:email and Password=:password";
-$query= $dbh -> prepare($sql);
-$query-> bindParam(':email', $email, PDO::PARAM_STR);
-$query-> bindParam(':password', $password, PDO::PARAM_STR);
-$query-> execute();
-$results=$query->fetchAll(PDO::FETCH_OBJ);
-if($query->rowCount() > 0)
-{
-$_SESSION['alogin']=$_POST['username'];
-echo "<script type='text/javascript'> document.location = 'dashboard.php'; </script>";
-} else{
-  
-  echo "<script>alert('Invalid Details');</script>";
 
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/config.php';
+
+use App\Core\Csrf;
+use App\Core\Security;
+use App\Core\Session;
+use App\Services\AuthService;
+
+if (!empty($_SESSION['alogin'])) {
+    Security::redirect('dashboard.php');
 }
 
+$error = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
+    Csrf::requireValid();
+    $auth = new AuthService($dbh);
+    $res = $auth->attemptAdminLogin((string) ($_POST['username'] ?? ''), (string) ($_POST['password'] ?? ''));
+    if ($res['success']) {
+        Session::setFlash('success', $res['message']);
+        Security::redirect('dashboard.php');
+    }
+    $error = $res['message'];
 }
-
 ?>
-<!doctype html>
-<html lang="en" class="no-js">
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1">
-	<meta name="description" content="">
-	<meta name="author" content="">
-
-	<title>Car Rental Portal | Admin Login</title>
-	<link rel="stylesheet" href="css/font-awesome.min.css">
-	<link rel="stylesheet" href="css/bootstrap.min.css">
-	<link rel="stylesheet" href="css/dataTables.bootstrap.min.css">
-	<link rel="stylesheet" href="css/bootstrap-social.css">
-	<link rel="stylesheet" href="css/bootstrap-select.css">
-	<link rel="stylesheet" href="css/fileinput.min.css">
-	<link rel="stylesheet" href="css/awesome-bootstrap-checkbox.css">
-	<link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Sign In | DriveX Assam</title>
+  <link rel="shortcut icon" href="../assets/images/favicon-icon/favicon.png">
+  <link rel="stylesheet" href="../assets/css/drivex.css">
 </head>
+<body class="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans">
+  <div class="w-full max-w-md rounded-2xl border border-slate-800 bg-white p-8 shadow-2xl">
+    <div class="text-center border-b border-slate-100 pb-5 mb-6">
+      <div class="text-2xl font-extrabold text-slate-950">Drive<span class="text-red-600">X</span> <span class="text-blue-700">Admin</span></div>
+      <p class="mt-1 text-xs text-slate-500">Sign in to manage fleet, bookings, payments &amp; tokens</p>
+    </div>
 
-<body>
-	
-	<div class="login-page bk-img" style="background-image: url(img/login-bg.jpg);">
-		<div class="form-content">
-			<div class="container">
-				<div class="row">
-					<div class="col-md-6 col-md-offset-3">
-						<h1 class="text-center text-bold mt-4x" style="color:#fff">Admin | Sign in</h1>
-						<div class="well row pt-2x pb-3x bk-light">
-							<div class="col-md-8 col-md-offset-2">
-								<form method="post">
+    <?php if ($error): ?>
+      <div class="mb-4 rounded-lg border-l-4 border-red-600 bg-red-50 p-3 text-xs font-semibold text-red-900">
+        <?php echo Security::e($error); ?>
+      </div>
+    <?php endif; ?>
 
-									<label for="" class="text-uppercase text-sm">Your Username </label>
-									<input type="text" placeholder="Username" name="username" class="form-control mb">
+    <form method="post" class="space-y-4">
+      <?php echo Csrf::field(); ?>
+      <div>
+        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Admin Username</label>
+        <input type="text" name="username" required class="form-input" placeholder="admin">
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Password</label>
+        <input type="password" name="password" required class="form-input" placeholder="Enter admin password">
+      </div>
+      <button type="submit" name="login" class="btn-primary w-full !py-3">Sign In to Admin Panel</button>
+    </form>
 
-									<label for="" class="text-uppercase text-sm">Password</label>
-									<input type="password" placeholder="Password" name="password" class="form-control mb">
-		
-
-									<button class="btn btn-primary btn-block" name="login" type="submit">LOGIN</button>
-
-								</form>
-
-			<p style="margin-top: 4%" align="center"><a href="../index.php">Back to Home</a>	</p>
-							</div>
-
-						</div>
-							
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-	
-	<!-- Loading Scripts -->
-	<script src="js/jquery.min.js"></script>
-	<script src="js/bootstrap-select.min.js"></script>
-	<script src="js/bootstrap.min.js"></script>
-	<script src="js/jquery.dataTables.min.js"></script>
-	<script src="js/dataTables.bootstrap.min.js"></script>
-	<script src="js/Chart.min.js"></script>
-	<script src="js/fileinput.js"></script>
-	<script src="js/chartData.js"></script>
-	<script src="js/main.js"></script>
-
+    <div class="mt-6 text-center text-xs">
+      <a href="../index.php" class="font-semibold text-slate-600 hover:text-blue-700">&larr; Back to Customer Portal</a>
+    </div>
+  </div>
 </body>
-
 </html>
