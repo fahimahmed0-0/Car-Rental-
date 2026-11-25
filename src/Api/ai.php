@@ -6,7 +6,7 @@ require_once __DIR__ . '/../bootstrap.php';
 
 use App\Core\Csrf;
 use App\Core\Security;
-use App\Services\AI\AiOrchestrator;
+use App\Services\AI\FleetAssistantService;
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Security::jsonResponse(['success' => false, 'message' => 'Method not allowed.'], 405);
@@ -30,7 +30,7 @@ if (empty($input) && str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'application/j
 }
 
 $action = (string) ($input['action'] ?? '');
-$ai = new AiOrchestrator($dbh);
+$ai = new FleetAssistantService($dbh);
 
 try {
     switch ($action) {

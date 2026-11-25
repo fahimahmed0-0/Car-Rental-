@@ -7,8 +7,7 @@ namespace App\Core;
 use SessionHandlerInterface;
 
 /**
- * Signed stateless cookie session handler for zero-DB serverless demos (Vercel).
- * Persists logins, flash messages, and CSRF tokens across serverless lambda invocations.
+ * HMAC-signed stateless cookie session handler for serverless deployments without external session storage.
  */
 final class CookieSessionHandler implements SessionHandlerInterface
 {
@@ -20,7 +19,7 @@ final class CookieSessionHandler implements SessionHandlerInterface
     {
         $this->secure = $secure;
         $key = (string) Env::get('APP_KEY', '');
-        $this->secret = $key !== '' ? $key : hash('sha256', 'drivex-assam-portfolio-' . APP_ROOT);
+        $this->secret = $key !== '' ? $key : hash('sha256', 'drivex-assam-session-' . APP_ROOT);
     }
 
     public function open(string $path, string $name): bool

@@ -7,8 +7,7 @@ namespace App\Core;
 use PDO;
 
 /**
- * Zero-configuration SQLite Portfolio Demo database (auto-created & seeded in /tmp or storage/cache).
- * Enables full interactive testing on Vercel or locally without provisioning MySQL.
+ * Embedded SQLite demo database (auto-seeded in /tmp or storage/cache when MySQL is unconfigured).
  */
 final class DemoDatabase
 {
@@ -272,7 +271,7 @@ final class DemoDatabase
             $vStmt->execute($v);
         }
 
-        // Demo Customer (with 25 loyalty tokens ready to redeem!)
+        // Demo customer (25 initial loyalty tokens)
         $pdo->prepare(
             'INSERT OR IGNORE INTO tblusers (FullName, EmailId, Password, ContactNo, City, Country, Role, TokenBalance, TotalTokensEarned)
              VALUES (?, ?, ?, ?, ?, ?, ?, 25, 25)'
@@ -307,7 +306,7 @@ final class DemoDatabase
         $tStmt->execute([self::DEMO_CUSTOMER_EMAIL, 'Booked the Vitara Brezza for a 3-day Shillong trip. Smooth airport pickup and transparent ₹ pricing.', 'clean']);
         $tStmt->execute([self::DEMO_CUSTOMER_EMAIL, 'Earned 5 tokens after my Kaziranga ride and redeemed them for ₹300 off on my next booking!', 'clean']);
 
-        // Sample completed & confirmed bookings + payment transaction + token ledger for rich Demo dashboards
+        // Sample completed and confirmed bookings, transactions, and ledger entries
         $pastFrom = date('Y-m-d', strtotime('-14 days'));
         $pastTo = date('Y-m-d', strtotime('-12 days'));
         $futureFrom = date('Y-m-d', strtotime('+7 days'));
@@ -340,10 +339,10 @@ final class DemoDatabase
 
         $pdo->prepare(
             "INSERT INTO tbltokenledger (user_email, booking_id, booking_number, entry_type, delta, discount_amount, note)
-             VALUES (?, NULL, NULL, 'admin_adjust', 20, 0.00, 'Welcome bonus tokens for portfolio demo')"
+             VALUES (?, NULL, NULL, 'admin_adjust', 20, 0.00, 'Welcome bonus tokens')"
         )->execute([self::DEMO_CUSTOMER_EMAIL]);
 
-        // Sample contact queries for Admin AI Reply Copilot
+        // Sample customer inquiry
         $pdo->prepare('INSERT INTO tblcontactusquery (name, EmailId, ContactNumber, Message, status) VALUES (?, ?, ?, ?, 0)')
             ->execute(['Rohan Das', 'rohan.das@example.com', '9864011223', 'Hi, do you provide pickup at Guwahati Airport (GAU) for a 4-day Shillong trip?']);
 

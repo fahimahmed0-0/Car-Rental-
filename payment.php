@@ -74,7 +74,7 @@ include __DIR__ . '/includes/layout_head.php';
     </div>
     <div class="flex items-center gap-3">
       <?php if ($order['provider'] === 'sandbox'): ?>
-        <span class="rounded-full border border-sky-400/40 bg-blue-950 px-3 py-1 text-xs font-bold text-sky-300">SANDBOX DEMO GATEWAY</span>
+        <span class="rounded-full border border-sky-400/40 bg-blue-950 px-3 py-1 text-xs font-bold text-sky-300">TEST PAYMENT GATEWAY</span>
       <?php endif; ?>
       <div class="rounded-lg border border-red-500/40 bg-red-950/60 px-4 py-2 text-center" x-data="countdownTimer(<?php echo $secondsRemaining; ?>)">
         <div class="text-[10px] font-bold uppercase tracking-wider text-red-300">Price Lock Expires</div>
@@ -127,9 +127,9 @@ include __DIR__ . '/includes/layout_head.php';
         </div>
 
         <?php if (!empty($order['upi_uri'])): ?>
-          <!-- Functional Sandbox QR Section -->
+          <!-- Test UPI QR -->
           <div class="card p-6 text-center" x-show="method === 'upi'">
-            <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-900">Scan Sandbox UPI QR</h3>
+            <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-900">Scan Test UPI QR</h3>
             <p class="mt-1 text-xs text-slate-500">Amount locked to server-verified total: <strong>₹<?php echo number_format((float) $order['amount'], 2); ?></strong></p>
             <div class="my-4 inline-block rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div id="sandbox-qr-box" class="flex items-center justify-center"></div>

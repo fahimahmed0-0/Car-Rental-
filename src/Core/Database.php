@@ -8,7 +8,7 @@ use PDO;
 use PDOException;
 
 /**
- * Singleton PDO database connector with Cloud MySQL SSL and Zero-Config Portfolio Demo fallback.
+ * Singleton PDO connection manager with Cloud MySQL TLS support and automatic SQLite demo mode.
  */
 final class Database
 {
@@ -30,8 +30,8 @@ final class Database
         $isVercel = Env::bool('VERCEL', false) || (getenv('VERCEL_ENV') !== false && getenv('VERCEL_ENV') !== '');
         $explicitDemo = Env::bool('DEMO_MODE', false);
 
-        // Zero-DB Portfolio Mode automatically activates when DEMO_MODE=true
-        // or when deployed on Vercel without an external DB_HOST configured.
+        // Activate embedded SQLite demo database when DEMO_MODE=true
+        // or on serverless deployments without an external DB_HOST.
         if ($explicitDemo || ($isVercel && ($host === '' || $host === 'localhost' || $host === '127.0.0.1'))) {
             self::$demoMode = true;
             self::$pdo = DemoDatabase::connect();
@@ -69,7 +69,7 @@ final class Database
         } catch (PDOException $e) {
             error_log('Database connection failed: ' . $e->getMessage());
 
-            // In web requests without strict DB requirement, gracefully fall back to SQLite Portfolio Demo
+            // Fall back to SQLite demo mode on web requests if MySQL is unreachable
             if (PHP_SAPI !== 'cli' && Env::bool('DB_DEMO_FALLBACK', true)) {
                 self::$demoMode = true;
                 self::$pdo = DemoDatabase::connect();

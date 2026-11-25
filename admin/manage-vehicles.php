@@ -35,7 +35,7 @@ include __DIR__ . '/includes/layout_head.php';
       <h1 class="text-2xl font-extrabold text-slate-950">Manage Vehicles</h1>
       <p class="text-xs text-slate-500">Edit fleet specifications, pricing (₹ INR), and vehicle photos.</p>
     </div>
-    <a href="post-avehical.php" class="btn-primary !py-2 !text-xs">+ Post a Vehicle</a>
+    <a href="post-vehicle.php" class="btn-primary !py-2 !text-xs">+ Post a Vehicle</a>
   </div>
 
   <div class="card overflow-hidden">

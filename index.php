@@ -44,7 +44,7 @@ $today = date('Y-m-d');
 $tomorrow = date('Y-m-d', strtotime('+1 day'));
 ?>
 
-<!-- Hero Section (Crisp Black + Blue + White + Red CTA) -->
+<!-- Hero -->
 <section class="relative bg-slate-950 text-white border-b-4 border-blue-700 overflow-hidden">
   <div class="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
     <div class="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-center">
@@ -60,7 +60,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
           Book inspected hatchbacks, SUVs, and 7-seaters with transparent <strong class="text-white">₹ INR</strong> daily pricing, instant date availability, and loyalty token discounts on every completed trip.
         </p>
 
-        <!-- Smart Search Bar (Supports Dates + Natural Language AI Finder) -->
+        <!-- Search Bar -->
         <div class="rounded-2xl border border-slate-800 bg-white p-4 text-slate-900 shadow-lg">
           <form action="car-listing.php" method="get" class="grid grid-cols-1 gap-3 sm:grid-cols-12">
             <div class="sm:col-span-5">
@@ -110,7 +110,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
   </div>
 </section>
 
-<!-- Quick Brand Filter Strip (Light Blue) -->
+<!-- Brand Quick Filters -->
 <section class="border-b border-sky-100 bg-blue-50/70 py-5">
   <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
     <span class="text-xs font-bold uppercase tracking-wider text-blue-900">Browse by Brand:</span>
@@ -146,7 +146,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
       <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <?php foreach ($featuredCars as $car): ?>
           <article class="card group overflow-hidden flex flex-col transition hover:border-blue-500 hover:shadow-md">
-            <a href="vehical-details.php?vhid=<?php echo (int) $car->id; ?>" class="relative block h-52 bg-slate-100 overflow-hidden">
+            <a href="vehicle-details.php?vhid=<?php echo (int) $car->id; ?>" class="relative block h-52 bg-slate-100 overflow-hidden">
               <img src="<?php echo Security::e(Security::vehicleImageUrl($car->Vimage1)); ?>"
                    alt="<?php echo Security::e($car->BrandName . ' ' . $car->VehiclesTitle); ?>"
                    class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
@@ -161,7 +161,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
             <div class="flex flex-1 flex-col p-5">
               <div class="flex items-start justify-between gap-3">
                 <h3 class="text-lg font-bold text-slate-950 leading-snug">
-                  <a href="vehical-details.php?vhid=<?php echo (int) $car->id; ?>" class="hover:text-blue-700 transition">
+                  <a href="vehicle-details.php?vhid=<?php echo (int) $car->id; ?>" class="hover:text-blue-700 transition">
                     <?php echo Security::e($car->VehiclesTitle); ?>
                   </a>
                 </h3>
@@ -182,7 +182,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
               </div>
 
               <div class="mt-4 pt-1 flex gap-2">
-                <a href="vehical-details.php?vhid=<?php echo (int) $car->id; ?>" class="btn-primary w-full">View &amp; Book</a>
+                <a href="vehicle-details.php?vhid=<?php echo (int) $car->id; ?>" class="btn-primary w-full">View &amp; Book</a>
               </div>
             </div>
           </article>
@@ -192,7 +192,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
   </div>
 </section>
 
-<!-- Why DriveX + Loyalty Program (Light Blue + White) -->
+<!-- Program Highlights -->
 <section class="border-y border-slate-200 bg-slate-50 py-14">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-6 md:grid-cols-4">

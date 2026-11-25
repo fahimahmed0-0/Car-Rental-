@@ -1,98 +1,64 @@
-# DriveX Assam — Car Rental System (v2.0)
+# DriveX Assam - Car Rental Platform
 
-Modernized PHP 8.2 + MariaDB car rental platform featuring a clean **White / Blue / Black / Red / Light Blue** interface, transactional booking concurrency locks, an immutable loyalty token ledger, Razorpay + built-in Sandbox checkout, and a **3-Tier Resilient AI Engine** with deterministic offline fallbacks.
+Full-stack car rental platform built with PHP 8.2, PDO (MariaDB / embedded SQLite demo mode), Tailwind CSS, and Alpine.js. Supports real-time booking date locking, loyalty token redemptions, online/test payment checkout, admin analytics, and natural-language fleet search.
 
----
+## Architecture Overview
 
-## Architecture Highlights
+```text
+.
+├── api/                  # Vercel serverless front controller & JSON endpoints
+├── admin/                # Admin portal (dashboard, bookings, fleet, tokens, CMS, mail outbox)
+├── assets/css/           # Tailwind CSS input & compiled stylesheet
+├── database/             # Schema SQL template, migrations, and seed script
+├── includes/             # Shared layout templates, auth handlers, modals, assistant widget
+├── src/
+│   ├── Api/              # JSON API handlers (vehicles, bookings, availability, payments, assistant, analytics)
+│   ├── Core/             # Env, Database, SqliteCompatPdo, DemoDatabase, Session/CookieSession, CSRF, Security
+│   ├── Services/         # AuthService, BookingService, PricingService, TokenLedgerService, PaymentService, MailService, UploadService
+│   └── Services/AI/      # FleetAssistantService & RuleEngine (optional Gemini / OpenAI / Ollama with built-in PHP engine)
+├── tests/                # CLI unit & integration test suite
+└── vercel.json           # Serverless routing and static asset configuration
+```
 
-* **Clean Layered Backend (`src/`):**
-  * `src/Core/`: Zero-dependency `.env` loader (`Env`), PDO connector (`Database`), CSRF manager (`Csrf`), secure session & rate limiter (`Session`, `Security`).
-  * `src/Services/`: `AuthService` (Argon2/bcrypt + transparent MD5 auto-upgrade + 6-digit OTP resets), `BookingService` (`FOR UPDATE` row locks + auto-expiring 10-min checkout locks), `PricingService`, `TokenLedgerService` (immutable `tbltokenledger`), `PaymentService` (Razorpay + Sandbox QR/simulator), `MailService` (PHPMailer SMTP + `tblmailoutbox` fallback), `UploadService`.
-  * `src/Services/AI/`: `AiOrchestrator` (**Tier 1 Cloud LLM** Gemini/OpenAI with circuit breaker → **Tier 2 Local Ollama** → **Tier 3 `DeterministicAiFallback`** PHP/SQL engine).
-* **JSON REST API (`api/v1/`):** `vehicles.php`, `availability.php`, `bookings.php`, `payments.php`, `admin-analytics.php`, `ai.php`.
-* **UI (`assets/css/drivex.css`):** Precompiled Tailwind CSS + Alpine.js + Chart.js v4.
+## Key Features
 
----
+- **Transactional Booking & Date Locks:** Overlap validation checks active reservations using row-level locking (`FOR UPDATE` on MariaDB) and auto-expiring 10-minute pending checkout locks.
+- **Loyalty Token Ledger:** Atomic ledger (`tbltokenledger`) awards 5 tokens per completed trip, validates minimum 15-token redemptions (`5 tokens = ₹100`), and automatically refunds redeemed tokens on cancellation or expiry.
+- **Checkout & Receipt Pipeline:** Server-computed booking totals with Razorpay order/signature verification and an automatic local/test gateway (`UPI QR`, card, wallet, netbanking) plus idempotency key deduplication.
+- **Smart Fleet Search & Assistant:** Parses natural-language vehicle queries (seats, fuel type, transmission, brand, max daily budget, hill/city use) using an optional LLM provider (`AI_API_KEY` or `AI_LOCAL_URL`) or the built-in PHP rule engine.
+- **Security Controls:** Argon2/bcrypt password verification (with seamless legacy hash upgrade), 6-digit hashed OTP password resets, CSRF tokens on state-changing requests, DB-backed rate limiting, MIME/magic-byte upload validation, and CMS HTML sanitization.
 
-## Quick Setup (XAMPP / Apache / MariaDB)
+## Local Setup (XAMPP / PHP + MariaDB)
 
-1. **Create `.env` from template:**
+1. Configure environment variables:
    ```bash
    cp .env.example .env
    ```
-   Configure `DB_HOST`, `DB_USER`, `DB_PASS`, `DB_NAME`. All other keys (`SMTP_*`, `RAZORPAY_*`, `AI_API_KEY`) are optional—built-in fallbacks handle local/offline mode automatically.
+   Update `DB_HOST`, `DB_USER`, `DB_PASS`, and `DB_NAME` in `.env`. SMTP, Razorpay, Cloudinary, and AI keys are optional.
 
-2. **Import database schema:**
+2. Initialize database and sample data:
    ```bash
-   mysql -u root -p carrental < database/carrental.template.sql
-   ```
-
-3. **Run idempotent migrations & seed script (CLI only):**
-   ```bash
+   mysql -u root < database/carrental.template.sql
    php database/migrate.php
    php database/seed.php
    ```
-   *(If upgrading an older database, `migrate.php` safely adds missing tables/columns and migrates legacy token balances into `tbltokenledger`.)*
 
-4. **Rebuild CSS (only needed if editing Tailwind templates):**
+3. Build CSS and run tests:
    ```bash
    npm install
    npm run build:css
-   ```
-
-5. **Run automated tests:**
-   ```bash
    php tests/run.php
    ```
 
----
+## Deploying to Vercel
 
-## Fallback Behavior (Zero Single Points of Failure)
+### Preview Mode (Embedded SQLite)
+Connect the repository to Vercel and deploy with no database configuration required. When `VERCEL` is set without an external `DB_HOST`, the application automatically boots [DemoDatabase](src/Core/DemoDatabase.php) in `/tmp` using [CookieSessionHandler](src/Core/CookieSessionHandler.php) and displays **Demo Sign In** shortcuts on the customer and admin login forms.
 
-| Subsystem | Primary Mode | Automatic Fallback |
-| :--- | :--- | :--- |
-| **Database & Sessions** | MariaDB / Cloud MySQL (`DB_HOST`) | **Zero-DB Portfolio Demo Mode** (auto-seeded SQLite `DemoDatabase` + HMAC cookie sessions) |
-| **AI Search, Assistant & Copilot** | Cloud LLM (`AI_PROVIDER=gemini` or `openai`) | Local Ollama (`AI_LOCAL_URL`) → `DeterministicAiFallback` (PHP regex/SQL engine) |
-| **Payments** | Live Razorpay (`PAYMENT_MODE=razorpay`) | Built-in **Sandbox Gateway** (QR + UPI/Card/Wallet/Netbanking simulator) |
-| **Email / OTPs** | PHPMailer SMTP (`SMTP_HOST` configured) | Queued in `tblmailoutbox` (inspectable in Admin → *Mail Outbox*) |
-| **Vehicle Images** | Cloudinary (`CLOUDINARY_*`) or local disk (XAMPP) | External `https://` image URL input |
+> Note: `/tmp` SQLite data resets when serverless containers recycle. Set a random `APP_KEY` environment variable if you want session cookie signatures shared across instances.
 
----
-
-## Deploying to Vercel (`vercel.json` + `api/index.php`)
-
-### Option A: Zero-Database Portfolio Demo Mode (Recommended for Recruiters — Zero Setup)
-Deploy straight from GitHub to Vercel with **no environment variables or external database required**:
-1. Connect your GitHub repository in Vercel and click **Deploy**.
-2. Because no external `DB_HOST` is configured on Vercel (`VERCEL` env present), DriveX automatically boots in **Portfolio Demo Mode**:
-   * Auto-seeds an isolated SQLite database (`DemoDatabase`) with 6 curated Assam fleet vehicles, sample bookings, payment transactions, and 25 loyalty tokens.
-   * Uses `CookieSessionHandler` (HMAC-SHA256 signed HttpOnly cookie) so logins, CSRF tokens, and flash messages persist seamlessly across stateless lambdas.
-   * Displays **1-Click Sign In** buttons on both the Customer Login modal (`demo@drivexassam.com`) and Admin Portal (`admin/index.php`) so recruiters can test every workflow immediately.
-
-> *Note:* Vercel's `/tmp` storage is ephemeral across cold starts (demo bookings/changes auto-reset on fresh containers). Set `APP_KEY` in Vercel Environment Variables if you want cookie signatures to stay consistent across multiple containers.
-
-### Option B: Persistent Production Database (Cloud MySQL)
-When you want persistent multi-user production storage on Vercel:
-1. **Provision an External Cloud MySQL Database** (e.g. **TiDB Serverless**, **Aiven MySQL**, or **Railway MySQL**).
-2. **Initialize the Remote Database from your local terminal:**
-   Set your Cloud MySQL credentials temporarily in `.env` (with `DB_PORT` and `DB_SSL=true` if required by your provider) and run:
-   ```bash
-   mysql -h YOUR_HOST -P YOUR_PORT -u YOUR_USER -p YOUR_DB < database/carrental.template.sql
-   php database/migrate.php
-   php database/seed.php
-   ```
-3. **Configure Vercel Project Environment Variables:**
-   * `APP_ENV=production`, `APP_DEBUG=false`, `SESSION_DRIVER=database`, `APP_KEY=<random-32-byte-secret>`
-   * `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`, `DB_SSL=true`
-   * Optional: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (for admin image uploads on Vercel; `https://` URLs also work without Cloudinary)
-   * Optional: `AI_PROVIDER`, `AI_API_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `SMTP_*`
-4. **Deploy:** Push to `main` or run `vercel --prod`.
-
----
-
-## Security Notes
-
-* Never commit `.env` or `.sql` database dumps (`.gitignore` and `.htaccess` block `src/`, `database/`, `storage/`, `tests/`, and `.env`).
-* All state-changing customer and admin actions require `POST` + CSRF validation.
-* `payment.php` loads `FinalAmount` strictly from the database and verifies booking ownership (`userEmail`).
+### Production Database (Cloud MySQL)
+To persist live bookings across users and deployments:
+1. Run `database/carrental.template.sql`, `php database/migrate.php`, and `php database/seed.php` against your Cloud MySQL database (TiDB, Aiven, Railway, etc.).
+2. Configure `APP_ENV=production`, `SESSION_DRIVER=database`, `APP_KEY`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`, and `DB_SSL=true` in Vercel Environment Variables.
+3. Optionally set `CLOUDINARY_*`, `RAZORPAY_*`, `AI_*`, and `SMTP_*` variables.

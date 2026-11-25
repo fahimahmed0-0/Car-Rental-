@@ -3,7 +3,6 @@
 declare(strict_types=1);
 ?>
 <div x-data="driveXAssistant()" class="fixed bottom-5 right-5 z-40 print:hidden">
-  <!-- Launcher Button (Clean Blue + White, no neon/purple) -->
   <button type="button" @click="open = !open"
           class="flex items-center gap-2 rounded-full bg-blue-700 px-4 py-3 text-xs font-bold text-white shadow-lg hover:bg-blue-800 border border-blue-600 transition">
     <span class="h-2 w-2 rounded-full bg-sky-300"></span>
@@ -51,7 +50,7 @@ function driveXAssistant() {
     open: false,
     input: '',
     loading: false,
-    engineLabel: 'Grounded in live DriveX catalog & policies',
+    engineLabel: 'Fleet availability, pricing & booking policies',
     messages: [
       { role: 'bot', text: 'Hello! Ask me about daily ₹ prices, loyalty tokens, cancellation refunds, or our Guwahati pickup hub.' }
     ],

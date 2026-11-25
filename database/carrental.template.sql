@@ -1,4 +1,4 @@
--- DriveX Assam (Car Rental Portal) v2.0 Complete Database Template
+-- DriveX Assam Database Schema Template
 -- Compatible with MariaDB 10.4+ / MySQL 8.0+
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";

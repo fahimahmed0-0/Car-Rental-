@@ -38,7 +38,7 @@ use App\Core\Security;
       <div class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3.5 text-xs">
         <div class="flex items-center justify-between gap-2">
           <div>
-            <p class="font-bold text-slate-900">Portfolio Recruiter Demo</p>
+            <p class="font-bold text-slate-900">Demo Account</p>
             <p class="mt-0.5 text-slate-600">
               Email: <code class="font-mono text-slate-900"><?php echo Security::e(DemoDatabase::DEMO_CUSTOMER_EMAIL); ?></code>
               &bull; Pass: <code class="font-mono text-slate-900"><?php echo Security::e(DemoDatabase::DEMO_CUSTOMER_PASS); ?></code>
@@ -47,7 +47,7 @@ use App\Core\Security;
           <button type="button"
                   onclick="var f=this.closest('#loginform').querySelector('form');f.querySelector('[name=login_id]').value='<?php echo Security::e(DemoDatabase::DEMO_CUSTOMER_EMAIL); ?>';f.querySelector('[name=password]').value='<?php echo Security::e(DemoDatabase::DEMO_CUSTOMER_PASS); ?>';f.querySelector('[name=auth_login]').click();"
                   class="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white hover:bg-blue-800 transition">
-            1-Click Sign In
+            Demo Sign In
           </button>
         </div>
       </div>

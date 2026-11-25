@@ -48,7 +48,7 @@ $navItems = [
       <?php if (Database::isDemoMode()): ?>
         <span class="inline-flex items-center gap-1.5 rounded-full border border-sky-400/40 bg-sky-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-sky-200">
           <span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
-          Portfolio Demo Mode
+          Demo Mode
         </span>
       <?php endif; ?>
       <span class="hidden sm:inline text-slate-400">Guwahati, Assam • Verified Fleet</span>

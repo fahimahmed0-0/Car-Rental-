@@ -8,7 +8,7 @@ use PDO;
 use Throwable;
 
 /**
- * Secure session initialization supporting MySQL DB sessions, stateless Cookie sessions (Zero-DB Vercel), and file sessions.
+ * Session lifecycle manager supporting database, signed-cookie, and file session drivers.
  */
 final class Session
 {
@@ -23,7 +23,7 @@ final class Session
 
         $isHttps = self::isHttpsRequest();
 
-        // In Zero-DB Portfolio Demo Mode on Vercel/stateless servers, use signed cookie sessions
+        // Use signed cookie sessions when running in SQLite demo mode
         if (Database::isDemoMode()) {
             session_set_save_handler(new CookieSessionHandler($isHttps), true);
             self::$handlerRegistered = true;

@@ -60,7 +60,7 @@ $today = date('Y-m-d');
          @toggle-ai-finder.window="aiOpen = !aiOpen">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
-    <!-- Smart Trip Car Finder Panel (3-Tier AI with Deterministic Fallback) -->
+    <!-- Smart Trip Car Finder -->
     <div x-show="aiOpen" x-transition style="display:none;" class="mb-6 rounded-xl border border-sky-200 bg-blue-50/70 p-5 shadow-sm">
       <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
@@ -177,7 +177,7 @@ $today = date('Y-m-d');
         <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           <template x-for="car in vehicles" :key="car.id">
             <article class="card overflow-hidden flex flex-col transition hover:border-blue-500 hover:shadow-md">
-              <a :href="'vehical-details.php?vhid=' + car.id + dateQuery()" class="relative block h-48 bg-slate-100">
+              <a :href="'vehicle-details.php?vhid=' + car.id + dateQuery()" class="relative block h-48 bg-slate-100">
                 <img :src="(car.Vimage1 && (car.Vimage1.startsWith('http://') || car.Vimage1.startsWith('https://'))) ? car.Vimage1 : ('admin/img/vehicleimages/' + (car.Vimage1 || 'car_755x430.png'))" :alt="car.VehiclesTitle" class="h-full w-full object-cover">
                 <span class="absolute top-3 left-3 rounded-md bg-slate-950/85 px-2.5 py-1 text-xs font-bold text-white" x-text="car.BrandName"></span>
                 <template x-if="filters.fromDate && filters.toDate">
@@ -189,7 +189,7 @@ $today = date('Y-m-d');
               <div class="flex flex-1 flex-col p-4">
                 <div class="flex items-start justify-between gap-2">
                   <h3 class="text-base font-bold text-slate-950">
-                    <a :href="'vehical-details.php?vhid=' + car.id + dateQuery()" class="hover:text-blue-700" x-text="car.VehiclesTitle"></a>
+                    <a :href="'vehicle-details.php?vhid=' + car.id + dateQuery()" class="hover:text-blue-700" x-text="car.VehiclesTitle"></a>
                   </h3>
                   <div class="text-right shrink-0">
                     <span class="block text-base font-extrabold text-red-600" x-text="'₹' + Number(car.PricePerDay).toLocaleString('en-IN')"></span>
@@ -208,7 +208,7 @@ $today = date('Y-m-d');
                 </div>
 
                 <div class="mt-4 pt-2">
-                  <a :href="'vehical-details.php?vhid=' + car.id + dateQuery()"
+                  <a :href="'vehicle-details.php?vhid=' + car.id + dateQuery()"
                      class="w-full"
                      :class="(filters.fromDate && filters.toDate && Number(car.is_available) === 0) ? 'btn-outline w-full' : 'btn-primary w-full'">
                     <span x-text="(filters.fromDate && filters.toDate && Number(car.is_available) === 0) ? 'Check Other Dates' : 'View Details & Book'"></span>

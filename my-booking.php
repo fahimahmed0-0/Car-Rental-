@@ -90,13 +90,13 @@ include __DIR__ . '/includes/layout_head.php';
 
               <div class="grid grid-cols-1 gap-5 md:grid-cols-12 items-center">
                 <div class="md:col-span-4">
-                  <a href="vehical-details.php?vhid=<?php echo (int) $bk->vid; ?>">
+                  <a href="vehicle-details.php?vhid=<?php echo (int) $bk->vid; ?>">
                     <img src="<?php echo Security::e(Security::vehicleImageUrl($bk->Vimage1)); ?>" alt="<?php echo Security::e($bk->VehiclesTitle); ?>" class="h-36 w-full rounded-xl object-cover border border-slate-200">
                   </a>
                 </div>
                 <div class="md:col-span-8 space-y-2 text-sm">
                   <h3 class="text-lg font-extrabold text-slate-950">
-                    <a href="vehical-details.php?vhid=<?php echo (int) $bk->vid; ?>" class="hover:text-blue-700">
+                    <a href="vehicle-details.php?vhid=<?php echo (int) $bk->vid; ?>" class="hover:text-blue-700">
                       <?php echo Security::e($bk->BrandName . ' ' . $bk->VehiclesTitle); ?>
                     </a>
                   </h3>

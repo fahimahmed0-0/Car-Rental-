@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /**
- * Automated CLI verification suite for DriveX Assam v2.
- * Runs pure unit tests always, and runs DB integration tests when MariaDB is reachable.
+ * Automated CLI verification suite for DriveX Assam.
+ * Runs unit tests and embedded SQLite demo tests always, plus MariaDB integration tests when reachable.
  */
 
 define('APP_ROOT', dirname(__DIR__));
@@ -27,8 +27,8 @@ use App\Core\Database;
 use App\Core\DemoDatabase;
 use App\Core\Env;
 use App\Core\Security;
-use App\Services\AI\AiOrchestrator;
-use App\Services\AI\DeterministicAiFallback;
+use App\Services\AI\FleetAssistantService;
+use App\Services\AI\RuleEngine;
 use App\Services\AuthService;
 use App\Services\BookingService;
 use App\Services\PaymentService;
@@ -89,14 +89,14 @@ assertTrue($invalidTokenCaught, 'Rejects < 15 tokens redemption');
 $cleanHtml = Security::sanitizeRichHtml('<p>Hello</p><script>alert(1)</script><a href="javascript:evil()" onclick="hack()">link</a>');
 assertTrue(!str_contains($cleanHtml, '<script>') && !str_contains($cleanHtml, 'onclick') && !str_contains($cleanHtml, 'javascript:'), 'Security::sanitizeRichHtml strips XSS');
 
-// Deterministic AI constraint parser
+// RuleEngine search query parser
 $fakeBrands = [(object) ['id' => 1, 'BrandName' => 'Maruti'], (object) ['id' => 2, 'BrandName' => 'Mahindra']];
-$parsed = DeterministicAiFallback::parseSearchConstraints('Need a 7 seater diesel Mahindra SUV under ₹4500 for Shillong', $fakeBrands);
-assertEquals(7, $parsed['seats'], 'AI Tier 3 parses 7 seats');
-assertEquals('Diesel', $parsed['fuel'], 'AI Tier 3 parses Diesel');
-assertEquals(2, $parsed['brand_id'], 'AI Tier 3 matches Mahindra brand');
-assertEquals(4500, $parsed['max_price'], 'AI Tier 3 parses max price 4500');
-assertEquals('hills', $parsed['terrain'], 'AI Tier 3 detects hills terrain');
+$parsed = RuleEngine::parseSearchConstraints('Need a 7 seater diesel Mahindra SUV under ₹4500 for Shillong', $fakeBrands);
+assertEquals(7, $parsed['seats'], 'RuleEngine parses 7 seats');
+assertEquals('Diesel', $parsed['fuel'], 'RuleEngine parses Diesel');
+assertEquals(2, $parsed['brand_id'], 'RuleEngine matches Mahindra brand');
+assertEquals(4500, $parsed['max_price'], 'RuleEngine parses max price 4500');
+assertEquals('hills', $parsed['terrain'], 'RuleEngine detects hills terrain');
 
 // ------------------------------------------------------------
 // 2. Database Integration Tests (if MariaDB test DB reachable)
@@ -187,17 +187,17 @@ try {
     assertTrue($cancelRes['success'], 'Customer cancellation succeeds');
     assertTrue($bookings->isVehicleAvailable($vid, '2099-06-01', '2099-06-02', false), 'Cancelled booking releases dates immediately');
 
-    // AI Orchestrator Tier 3 offline test
-    $ai = new AiOrchestrator($pdo);
+    // FleetAssistantService offline rule-engine test
+    $ai = new FleetAssistantService($pdo);
     $aiSearch = $ai->smartCarSearch('5 seater diesel under 3000');
-    assertTrue($aiSearch['success'] && !empty($aiSearch['vehicles']), 'AI smartCarSearch falls back cleanly to Tier 3 and returns ranked vehicles');
+    assertTrue($aiSearch['success'] && !empty($aiSearch['vehicles']), 'FleetAssistantService::smartCarSearch returns ranked vehicles');
     $aiChat = $ai->answerAssistant('How do loyalty tokens work?');
     assertTrue($aiChat['success'] && str_contains($aiChat['reply'], '15 tokens'), 'AI assistant answers policy accurately offline');
 } catch (Throwable $e) {
     echo "\n[SKIP] MariaDB integration tests skipped (" . $e->getMessage() . ")\n";
 }
 
-// Zero-DB Portfolio Demo Mode (SQLite + SqliteCompatPdo + CookieSessionHandler) tests
+// Embedded SQLite Demo Mode (DemoDatabase + SqliteCompatPdo + CookieSessionHandler) tests
 $demoCachePath = APP_ROOT . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'drivex_demo.sqlite';
 $demoTempPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'drivex_demo.sqlite';
 $hadCacheDemo = false;
@@ -213,16 +213,16 @@ assertTrue($vehicleCount >= 6, 'DemoDatabase auto-seeds 6+ fleet vehicles in SQL
 $_SESSION = [];
 $demoAuth = new AuthService($demoPdo);
 $demoCustLogin = $demoAuth->attemptCustomerLogin(DemoDatabase::DEMO_CUSTOMER_EMAIL, DemoDatabase::DEMO_CUSTOMER_PASS);
-assertTrue($demoCustLogin['success'], 'Demo customer 1-click credentials authenticate on SQLite');
+assertTrue($demoCustLogin['success'], 'Demo customer credentials authenticate on SQLite');
 
 $demoAdminLogin = $demoAuth->attemptAdminLogin(DemoDatabase::DEMO_ADMIN_USER, DemoDatabase::DEMO_ADMIN_PASS);
-assertTrue($demoAdminLogin['success'], 'Demo admin 1-click credentials authenticate on SQLite');
+assertTrue($demoAdminLogin['success'], 'Demo admin credentials authenticate on SQLite');
 
 $demoTokens = new TokenLedgerService($demoPdo);
 assertEquals(25, $demoTokens->getBalance(DemoDatabase::DEMO_CUSTOMER_EMAIL)['balance'], 'Demo customer starts with 25 seeded loyalty tokens');
 
 $demoBookings = new BookingService($demoPdo, $demoTokens);
-$demoCreated = $demoBookings->createBooking(DemoDatabase::DEMO_CUSTOMER_EMAIL, 1, '2099-08-01', '2099-08-02', 'Recruiter demo trip', 15, 'pay_now');
+$demoCreated = $demoBookings->createBooking(DemoDatabase::DEMO_CUSTOMER_EMAIL, 1, '2099-08-01', '2099-08-02', 'Demo trip', 15, 'pay_now');
 assertTrue((int) ($demoCreated['booking_number'] ?? 0) > 0, 'Demo SQLite booking created with token lock');
 
 $demoPayments = new PaymentService($demoPdo, $demoTokens);
@@ -234,7 +234,7 @@ $demoComp = $demoBookings->transitionStatus((int) $demoCreated['booking_id'], Bo
 assertTrue($demoComp['success'], 'Demo SQLite booking completes & awards +5 tokens');
 assertEquals(15, $demoTokens->getBalance(DemoDatabase::DEMO_CUSTOMER_EMAIL)['balance'], 'Demo SQLite completion awards +5 tokens (10 -> 15)');
 
-$demoAi = new AiOrchestrator($demoPdo);
+$demoAi = new FleetAssistantService($demoPdo);
 $demoAiSearch = $demoAi->smartCarSearch('5 seater suv under 4000');
 assertTrue($demoAiSearch['success'] && !empty($demoAiSearch['vehicles']), 'Demo SQLite AI smartCarSearch returns ranked fleet vehicles');
 

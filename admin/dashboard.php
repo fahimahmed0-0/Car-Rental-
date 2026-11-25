@@ -27,12 +27,12 @@ $totalRevenue = (float) $dbh->query("SELECT COALESCE(SUM(amount), 0) FROM tblpay
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-extrabold text-slate-950">Admin Command Center</h1>
-      <p class="text-xs text-slate-500">Live fleet, booking, revenue, and AI performance overview</p>
+      <h1 class="text-2xl font-extrabold text-slate-950">Admin Dashboard</h1>
+      <p class="text-xs text-slate-500">Live fleet, booking, and revenue metrics</p>
     </div>
     <div class="flex gap-2">
       <a href="manage-bookings.php" class="btn-red !py-2 !text-xs">Pending Bookings (<?php echo $pendingBookings; ?>)</a>
-      <a href="post-avehical.php" class="btn-primary !py-2 !text-xs">+ Add Vehicle</a>
+      <a href="post-vehicle.php" class="btn-primary !py-2 !text-xs">+ Add Vehicle</a>
     </div>
   </div>
 
@@ -60,7 +60,7 @@ $totalRevenue = (float) $dbh->query("SELECT COALESCE(SUM(amount), 0) FROM tblpay
     </a>
   </div>
 
-  <!-- Analytics Charts (Wired to real DB API) -->
+  <!-- Analytics Charts -->
   <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
     <div class="card p-6 lg:col-span-7">
       <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-900 mb-4">Revenue Trend (Last 6 Months)</h2>
@@ -76,13 +76,13 @@ $totalRevenue = (float) $dbh->query("SELECT COALESCE(SUM(amount), 0) FROM tblpay
     </div>
   </div>
 
-  <!-- AI Dynamic Pricing Advisor + Secondary Stats -->
+  <!-- Pricing & Utilization Insights -->
   <div class="grid grid-cols-1 gap-6 lg:grid-cols-12" x-data="pricingAdvisor()">
     <div class="card p-6 lg:col-span-8">
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">
         <div>
           <h2 class="text-base font-extrabold text-slate-950">Fleet Utilization &amp; Pricing Advisor</h2>
-          <p class="text-xs text-slate-500">Data-backed rate recommendations with deterministic SQL fallback</p>
+          <p class="text-xs text-slate-500">Utilization metrics and seasonal rate suggestions</p>
         </div>
         <button type="button" @click="loadInsights()" :disabled="pricingLoading" class="btn-outline !py-1.5 !text-xs">
           <span x-show="!pricingLoading">Generate Insights</span>
@@ -105,7 +105,7 @@ $totalRevenue = (float) $dbh->query("SELECT COALESCE(SUM(amount), 0) FROM tblpay
 
     <div class="card p-6 lg:col-span-4 space-y-3">
       <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-2">Quick Operations</h2>
-      <a href="manage-conactusquery.php" class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-xs font-semibold hover:bg-blue-50">
+      <a href="manage-queries.php" class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-xs font-semibold hover:bg-blue-50">
         <span>Contact Inquiries</span><span class="font-extrabold text-blue-700"><?php echo $queries; ?></span>
       </a>
       <a href="testimonials.php" class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-xs font-semibold hover:bg-blue-50">

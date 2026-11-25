@@ -8,8 +8,7 @@ use PDO;
 use PDOStatement;
 
 /**
- * PDO subclass for SQLite that transparently translates the app's MySQL expressions
- * so Portfolio Demo Mode runs identically to MariaDB without duplicating queries.
+ * SQLite PDO wrapper that maps MySQL scalar/date expressions to SQLite equivalents.
  */
 final class SqliteCompatPdo extends PDO
 {
