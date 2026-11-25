@@ -52,6 +52,7 @@ Modernized PHP 8.2 + MariaDB car rental platform featuring a clean **White / Blu
 
 | Subsystem | Primary Mode | Automatic Fallback |
 | :--- | :--- | :--- |
+| **Database & Sessions** | MariaDB / Cloud MySQL (`DB_HOST`) | **Zero-DB Portfolio Demo Mode** (auto-seeded SQLite `DemoDatabase` + HMAC cookie sessions) |
 | **AI Search, Assistant & Copilot** | Cloud LLM (`AI_PROVIDER=gemini` or `openai`) | Local Ollama (`AI_LOCAL_URL`) → `DeterministicAiFallback` (PHP regex/SQL engine) |
 | **Payments** | Live Razorpay (`PAYMENT_MODE=razorpay`) | Built-in **Sandbox Gateway** (QR + UPI/Card/Wallet/Netbanking simulator) |
 | **Email / OTPs** | PHPMailer SMTP (`SMTP_HOST` configured) | Queued in `tblmailoutbox` (inspectable in Admin → *Mail Outbox*) |
@@ -61,9 +62,19 @@ Modernized PHP 8.2 + MariaDB car rental platform featuring a clean **White / Blu
 
 ## Deploying to Vercel (`vercel.json` + `api/index.php`)
 
-This repository includes [vercel.json](vercel.json), [.vercelignore](.vercelignore), [api/index.php](api/index.php), and `tblsessions` DB-backed sessions so all routes run through a single `vercel-php` serverless function:
+### Option A: Zero-Database Portfolio Demo Mode (Recommended for Recruiters — Zero Setup)
+Deploy straight from GitHub to Vercel with **no environment variables or external database required**:
+1. Connect your GitHub repository in Vercel and click **Deploy**.
+2. Because no external `DB_HOST` is configured on Vercel (`VERCEL` env present), DriveX automatically boots in **Portfolio Demo Mode**:
+   * Auto-seeds an isolated SQLite database (`DemoDatabase`) with 6 curated Assam fleet vehicles, sample bookings, payment transactions, and 25 loyalty tokens.
+   * Uses `CookieSessionHandler` (HMAC-SHA256 signed HttpOnly cookie) so logins, CSRF tokens, and flash messages persist seamlessly across stateless lambdas.
+   * Displays **1-Click Sign In** buttons on both the Customer Login modal (`demo@drivexassam.com`) and Admin Portal (`admin/index.php`) so recruiters can test every workflow immediately.
 
-1. **Provision an External Cloud MySQL Database** (Vercel has no built-in MySQL): e.g. **TiDB Serverless**, **Aiven MySQL**, or **Railway MySQL**.
+> *Note:* Vercel's `/tmp` storage is ephemeral across cold starts (demo bookings/changes auto-reset on fresh containers). Set `APP_KEY` in Vercel Environment Variables if you want cookie signatures to stay consistent across multiple containers.
+
+### Option B: Persistent Production Database (Cloud MySQL)
+When you want persistent multi-user production storage on Vercel:
+1. **Provision an External Cloud MySQL Database** (e.g. **TiDB Serverless**, **Aiven MySQL**, or **Railway MySQL**).
 2. **Initialize the Remote Database from your local terminal:**
    Set your Cloud MySQL credentials temporarily in `.env` (with `DB_PORT` and `DB_SSL=true` if required by your provider) and run:
    ```bash
@@ -72,11 +83,11 @@ This repository includes [vercel.json](vercel.json), [.vercelignore](.verceligno
    php database/seed.php
    ```
 3. **Configure Vercel Project Environment Variables:**
-   * `APP_ENV=production`, `APP_DEBUG=false`, `SESSION_DRIVER=database`
+   * `APP_ENV=production`, `APP_DEBUG=false`, `SESSION_DRIVER=database`, `APP_KEY=<random-32-byte-secret>`
    * `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`, `DB_SSL=true`
    * Optional: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (for admin image uploads on Vercel; `https://` URLs also work without Cloudinary)
    * Optional: `AI_PROVIDER`, `AI_API_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `SMTP_*`
-4. **Deploy:** Connect the GitHub repo in Vercel and deploy (`vercel --prod` or auto-deploy on `main`).
+4. **Deploy:** Push to `main` or run `vercel --prod`.
 
 ---
 

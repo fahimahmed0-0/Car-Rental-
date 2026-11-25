@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Core\Database;
 use App\Core\Security;
 use App\Services\TokenLedgerService;
 
@@ -43,7 +44,13 @@ $navItems = [
         <span><?php echo Security::e($supportPhone); ?></span>
       </a>
     </div>
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-3 sm:gap-4">
+      <?php if (Database::isDemoMode()): ?>
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-sky-400/40 bg-sky-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-sky-200">
+          <span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
+          Portfolio Demo Mode
+        </span>
+      <?php endif; ?>
       <span class="hidden sm:inline text-slate-400">Guwahati, Assam • Verified Fleet</span>
       <a href="admin/index.php" class="text-slate-300 hover:text-white font-medium transition">Admin Portal</a>
     </div>

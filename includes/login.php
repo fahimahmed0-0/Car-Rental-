@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use App\Core\Csrf;
+use App\Core\Database;
+use App\Core\DemoDatabase;
+use App\Core\Security;
 ?>
 <div id="loginform" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true">
   <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
@@ -30,6 +33,25 @@ use App\Core\Csrf;
       </div>
       <button type="submit" name="auth_login" class="btn-primary w-full">Sign In</button>
     </form>
+
+    <?php if (Database::isDemoMode()): ?>
+      <div class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3.5 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <p class="font-bold text-slate-900">Portfolio Recruiter Demo</p>
+            <p class="mt-0.5 text-slate-600">
+              Email: <code class="font-mono text-slate-900"><?php echo Security::e(DemoDatabase::DEMO_CUSTOMER_EMAIL); ?></code>
+              &bull; Pass: <code class="font-mono text-slate-900"><?php echo Security::e(DemoDatabase::DEMO_CUSTOMER_PASS); ?></code>
+            </p>
+          </div>
+          <button type="button"
+                  onclick="var f=this.closest('#loginform').querySelector('form');f.querySelector('[name=login_id]').value='<?php echo Security::e(DemoDatabase::DEMO_CUSTOMER_EMAIL); ?>';f.querySelector('[name=password]').value='<?php echo Security::e(DemoDatabase::DEMO_CUSTOMER_PASS); ?>';f.querySelector('[name=auth_login]').click();"
+                  class="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white hover:bg-blue-800 transition">
+            1-Click Sign In
+          </button>
+        </div>
+      </div>
+    <?php endif; ?>
 
     <div class="mt-5 border-t border-slate-100 pt-4 text-center text-xs text-slate-600">
       Don't have an account?

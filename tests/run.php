@@ -22,7 +22,9 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+use App\Core\CookieSessionHandler;
 use App\Core\Database;
+use App\Core\DemoDatabase;
 use App\Core\Env;
 use App\Core\Security;
 use App\Services\AI\AiOrchestrator;
@@ -192,7 +194,68 @@ try {
     $aiChat = $ai->answerAssistant('How do loyalty tokens work?');
     assertTrue($aiChat['success'] && str_contains($aiChat['reply'], '15 tokens'), 'AI assistant answers policy accurately offline');
 } catch (Throwable $e) {
-    echo "\n[SKIP] DB integration tests skipped (" . $e->getMessage() . ")\n";
+    echo "\n[SKIP] MariaDB integration tests skipped (" . $e->getMessage() . ")\n";
+}
+
+// Zero-DB Portfolio Demo Mode (SQLite + SqliteCompatPdo + CookieSessionHandler) tests
+$demoCachePath = APP_ROOT . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'drivex_demo.sqlite';
+$demoTempPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'drivex_demo.sqlite';
+$hadCacheDemo = false;
+$hadTempDemo = is_file($demoTempPath);
+if (is_file($demoCachePath)) {
+    @unlink($demoCachePath);
+}
+
+$demoPdo = DemoDatabase::connect();
+$vehicleCount = (int) $demoPdo->query('SELECT COUNT(*) FROM tblvehicles')->fetchColumn();
+assertTrue($vehicleCount >= 6, 'DemoDatabase auto-seeds 6+ fleet vehicles in SQLite');
+
+$_SESSION = [];
+$demoAuth = new AuthService($demoPdo);
+$demoCustLogin = $demoAuth->attemptCustomerLogin(DemoDatabase::DEMO_CUSTOMER_EMAIL, DemoDatabase::DEMO_CUSTOMER_PASS);
+assertTrue($demoCustLogin['success'], 'Demo customer 1-click credentials authenticate on SQLite');
+
+$demoAdminLogin = $demoAuth->attemptAdminLogin(DemoDatabase::DEMO_ADMIN_USER, DemoDatabase::DEMO_ADMIN_PASS);
+assertTrue($demoAdminLogin['success'], 'Demo admin 1-click credentials authenticate on SQLite');
+
+$demoTokens = new TokenLedgerService($demoPdo);
+assertEquals(25, $demoTokens->getBalance(DemoDatabase::DEMO_CUSTOMER_EMAIL)['balance'], 'Demo customer starts with 25 seeded loyalty tokens');
+
+$demoBookings = new BookingService($demoPdo, $demoTokens);
+$demoCreated = $demoBookings->createBooking(DemoDatabase::DEMO_CUSTOMER_EMAIL, 1, '2099-08-01', '2099-08-02', 'Recruiter demo trip', 15, 'pay_now');
+assertTrue((int) ($demoCreated['booking_number'] ?? 0) > 0, 'Demo SQLite booking created with token lock');
+
+$demoPayments = new PaymentService($demoPdo, $demoTokens);
+$demoPay = $demoPayments->processSandboxPayment((int) $demoCreated['booking_number'], DemoDatabase::DEMO_CUSTOMER_EMAIL, 'upi', 'demo_idem_1');
+assertTrue($demoPay['success'], 'Demo SQLite sandbox payment succeeds');
+assertEquals(10, $demoTokens->getBalance(DemoDatabase::DEMO_CUSTOMER_EMAIL)['balance'], 'Demo SQLite payment deducts 15 tokens (25 -> 10)');
+
+$demoComp = $demoBookings->transitionStatus((int) $demoCreated['booking_id'], BookingService::STATUS_COMPLETED);
+assertTrue($demoComp['success'], 'Demo SQLite booking completes & awards +5 tokens');
+assertEquals(15, $demoTokens->getBalance(DemoDatabase::DEMO_CUSTOMER_EMAIL)['balance'], 'Demo SQLite completion awards +5 tokens (10 -> 15)');
+
+$demoAi = new AiOrchestrator($demoPdo);
+$demoAiSearch = $demoAi->smartCarSearch('5 seater suv under 4000');
+assertTrue($demoAiSearch['success'] && !empty($demoAiSearch['vehicles']), 'Demo SQLite AI smartCarSearch returns ranked fleet vehicles');
+
+$cookieHandler = new CookieSessionHandler(false);
+$_COOKIE['drivex_sess_data'] = base64_encode(json_encode(['exp' => time() + 60, 'data' => 'x']) ?: '') . '.invalidsig';
+assertEquals('', (string) $cookieHandler->read('test'), 'CookieSessionHandler rejects tampered HMAC signatures');
+unset($_COOKIE['drivex_sess_data'], $_SESSION);
+
+// Release SQLite file locks and clean up test SQLite file
+$demoAi = null;
+$demoBookings = null;
+$demoPayments = null;
+$demoTokens = null;
+$demoAuth = null;
+$demoPdo = null;
+gc_collect_cycles();
+if (!$hadCacheDemo && is_file($demoCachePath)) {
+    @unlink($demoCachePath);
+}
+if (!$hadTempDemo && is_file($demoTempPath)) {
+    @unlink($demoTempPath);
 }
 
 echo "\nSummary: {$passed} passed, {$failed} failed.\n";

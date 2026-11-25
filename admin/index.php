@@ -5,6 +5,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/config.php';
 
 use App\Core\Csrf;
+use App\Core\Database;
+use App\Core\DemoDatabase;
 use App\Core\Security;
 use App\Core\Session;
 use App\Services\AuthService;
@@ -59,6 +61,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
       </div>
       <button type="submit" name="login" class="btn-primary w-full !py-3">Sign In to Admin Panel</button>
     </form>
+
+    <?php if (Database::isDemoMode()): ?>
+      <div class="mt-5 rounded-xl border border-sky-200 bg-sky-50 p-3.5 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <p class="font-bold text-slate-900">Portfolio Demo Admin</p>
+            <p class="mt-0.5 text-slate-600">
+              User: <code class="font-mono text-slate-900"><?php echo Security::e(DemoDatabase::DEMO_ADMIN_USER); ?></code>
+              &bull; Pass: <code class="font-mono text-slate-900"><?php echo Security::e(DemoDatabase::DEMO_ADMIN_PASS); ?></code>
+            </p>
+          </div>
+          <button type="button"
+                  onclick="var f=document.querySelector('form');f.querySelector('[name=username]').value='<?php echo Security::e(DemoDatabase::DEMO_ADMIN_USER); ?>';f.querySelector('[name=password]').value='<?php echo Security::e(DemoDatabase::DEMO_ADMIN_PASS); ?>';f.querySelector('[name=login]').click();"
+                  class="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white hover:bg-blue-800 transition">
+            1-Click Admin
+          </button>
+        </div>
+      </div>
+    <?php endif; ?>
 
     <div class="mt-6 text-center text-xs">
       <a href="../index.php" class="font-semibold text-slate-600 hover:text-blue-700">&larr; Back to Customer Portal</a>

@@ -78,6 +78,9 @@ final class Security
 
     public static function redirect(string $url): never
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
         if (!headers_sent()) {
             header('Location: ' . $url);
         } else {
